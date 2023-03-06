@@ -23,10 +23,18 @@
             data() { // 代理数据
                 return {
                     name: 'xiao',
-                    age: 20
+                    age: 20,
+                    adress: {
+                        content: '通州',
+                        num: 30
+                    }
                 }
             }
         })
+        console.log('vm', vm)
+        // console.log('vm', vm._data, vm._data.name) // 取值触发get 会打印 用户取值了
+        vm._data.name = 'hhh' // 修改触发set 会打印 用户设置值了
+        console.log(vm.name) // hhh vm.xxx->vm._data.xxx
     </script>
 </body>
 </html>
