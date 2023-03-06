@@ -1,0 +1,1 @@
+{"version":3,"file":"vue.js","sources":["../src/index.js"],"sourcesContent":["// 会把全部的变量都挂载在vue上\nexport const a = 1000;\n\nexport default {a: 1}"],"names":["a"],"mappings":";;;;;;CAAA;AACO,OAAMA,CAAC,GAAG,KAAI;AAErB,aAAe;CAACA,EAAAA,CAAC,EAAE,CAAA;CAAC,CAAC;;;;;;;;;;;"}
