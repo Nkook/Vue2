@@ -10,6 +10,23 @@
     <script src="vue.js"></script>
     <script>
         console.log(Vue)
+        // vue的核心
+        // 响应式的数据变化，数据变化了，我可以监控到数据的变化
+        // 属性的取值 和 更改值 我们要监控到
+        
+        // 创建一个vue的实例
+        const vm = new Vue({
+            // data: { // 代理数据
+            //     name: 'xiao',
+            //     age: 20
+            // }
+            data() { // 代理数据
+                return {
+                    name: 'xiao',
+                    age: 20
+                }
+            }
+        })
     </script>
 </body>
 </html>
