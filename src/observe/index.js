@@ -40,6 +40,7 @@ export function defineReactive(target, key, value) { // 属性劫持。闭包，
         set(newValue) { // 修改的时候会执行set
             console.log('用户设置值了')
             if (newValue === value) return
+            observe(newValue) // 5-9 如果修改值的时候直接赋值个对象，对这个对象里的每个属性进行劫持
             value = newValue
         }
     })

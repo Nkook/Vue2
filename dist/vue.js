@@ -4,6 +4,19 @@
     (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+    function observe(data) {
+      // 对data这个对象进行劫持
+      // 5-1 判断是否是对象 // 只对对象进行劫持
+      if (typeof data !== 'object' || data == null) {
+        return;
+      }
+
+      // 5-2 如果一个对象被劫持过了，那就不需要再被劫持了（要判断一个对象是否被劫持过，可以增添一个实例，用实例来判断是否被劫持过）
+      // 在内部又创建了一个类，这个类专门去观测数据的。如果这个数据被观测过，那么它的实例就是这个类
+      // 对data这个数据进行观测
+      return new Observer(data);
+    }
+
     // 5-3
     class Observer {
       constructor(data) {
@@ -35,21 +48,10 @@
           // 修改的时候会执行set
           console.log('用户设置值了');
           if (newValue === value) return;
+          observe(newValue); // 5-9 如果修改值的时候直接赋值个对象，对这个对象里的每个属性进行劫持
           value = newValue;
         }
       });
-    }
-    function observe(data) {
-      // 对data这个对象进行劫持
-      // 5-1 判断是否是对象 // 只对对象进行劫持
-      if (typeof data !== 'object' || data == null) {
-        return;
-      }
-
-      // 5-2 如果一个对象被劫持过了，那就不需要再被劫持了（要判断一个对象是否被劫持过，可以增添一个实例，用实例来判断是否被劫持过）
-      // 在内部又创建了一个类，这个类专门去观测数据的。如果这个数据被观测过，那么它的实例就是这个类
-      // 对data这个数据进行观测
-      return new Observer(data);
     }
 
     function initState(vm) {

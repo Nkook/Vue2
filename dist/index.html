@@ -34,7 +34,11 @@
         console.log('vm', vm)
         // console.log('vm', vm._data, vm._data.name) // 取值触发get 会打印 用户取值了
         vm._data.name = 'hhh' // 修改触发set 会打印 用户设置值了
-        console.log(vm.name) // hhh vm.xxx->vm._data.xxx
+        vm.adress = {
+            num: 10
+        } // 如果属性值直接修改一个对象，则需要在set方法中对新的属性值的每一项进行observe数据劫持
+        console.log(vm.adress)
+        // console.log(vm.name) // hhh vm.xxx->vm._data.xxx
     </script>
 </body>
 </html>
