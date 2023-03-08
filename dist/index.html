@@ -27,18 +27,34 @@
                     adress: {
                         content: '通州',
                         num: 30
-                    }
+                    },
+                    hobby: ['eat', 'drink', {a: 1}]
                 }
             }
         })
         console.log('vm', vm)
+        // 1. 最初只能通过vm._data.xxx获取属性
         // console.log('vm', vm._data, vm._data.name) // 取值触发get 会打印 用户取值了
         vm._data.name = 'hhh' // 修改触发set 会打印 用户设置值了
+
+        // 2. 通过代理将vm.xx代理到vm._data.xx，通过vm则直接获取属性
+        // console.log(vm.name) // hhh vm.xxx->vm._data.xxx
+
+        // 3. 给属性直接赋值个对象，需要对新对象的每一个属性进行数据劫持
         vm.adress = {
             num: 10
         } // 如果属性值直接修改一个对象，则需要在set方法中对新的属性值的每一项进行observe数据劫持
         console.log(vm.adress)
-        // console.log(vm.name) // hhh vm.xxx->vm._data.xxx
+
+        // 4. 修改数组的方法及修改数组中引用类型的值进行数据劫持
+        // 修改数组 很少用索引来操作数组，因为[999]写代码，内部做劫持会浪费性能
+        // 用户一般修改数组，都是通过方法来修改的 push shift ....
+        // 如果是数组就不要用data去循环了！！
+
+        // vm.hobby[2].a // 是可以被劫持到的
+        // vm.hobby.push('1') // 打印method push
+        vm.hobby.unshift({a: 1}) // 会在数组前面添加，但是这个新增的a并没有set和get劫持。默认的会被劫持。为什么？只是拦截了方法，并没有对新增的选项做处理
+        console.log(vm.hobby) // 做过处理后会打印出，vm.hobby有四项，第一项是新增的a: 1,并且a有get和set方法
     </script>
 </body>
 </html>
