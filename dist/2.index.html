@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <div id="app">
+        <div style="color: red;">{{name}} hello</div>
+        <span>{{age}}</span>
+    </div>
+    <script src="vue.js"></script>
+    <script>
+        // 创建一个vue的实例
+        const vm = new Vue({
+            data: { // 代理数据
+                name: 'xiao',
+                age: 20,
+                adress: {
+                    content: '通州',
+                    num: 30
+                },
+                hobby: ['eat', 'drink', {a: 1}]
+            },
+            // 对模版进行编译
+            el: '#app', // 将数据 解析道 el元素上。就是将页面上的name和age进行个替换
+            // template: '<div>hello</div>'
+            // render() { }// 可以返回一些东西
+            
+        })
+        // 5. 也可以不写el: '#app',手动的去挂载。两个是一样的
+        // vm.$mount('#app')
+
+        // 模版指的是id="app"里的页面，也可以写在temlate属性上，也可以用render函数。
+        // 1. 模版引擎：每次把模版拿到，用数据来替换它。性能很差需要正则匹配替换。vue1.0的时候没有引入虚拟dom
+        // 2. 采用虚拟dom：数据变化后，比较虚拟dom的差异，最后更新需要更新的地方
+        // 3. 核心：把模版变成js语法，通过js语法生成虚拟dom
+
+        // 4. 语法之间的转换：从一个东西变成另一个东西。就比如es6->es5、css压缩
+        // 需要先变成语法树，再重新组装代码，成为新的语法
+        // 将template语法变成render函数
+
+    </script>
+</body>
+</html>

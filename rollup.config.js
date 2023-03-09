@@ -3,10 +3,11 @@
 // 3. 打包后可以通过一个html文件在浏览器中打开引用
 // 4. 配置插件
 // 5. 使用import和export default打包报错：https://blog.csdn.net/qq_38800316/article/details/127496678
-
+// 6. 安装npm install @rollup/plugin-node-resolve插件，在文件中引入其他文件的时候会默认找到index.js
 
 // import babel from 'rollup-plugin-babel'
 const babel = require('rollup-plugin-babel')
+const resolve = require('@rollup/plugin-node-resolve')
 
 // rollup默认可以导出一个对象作为打包的配置文件
 // export default {
@@ -22,6 +23,7 @@ module.exports = {
     plugins: [
         babel({ // 可以放置babel的选项：一般用babel，都会建一个babel的配置文件.babelrc，也可以在函数里直接去写。
             exclude: 'node_modules/**' // 排除node_modules下的所有文件 **代表所有的文件
-        })
+        }),
+        resolve()
     ]
 }
