@@ -44,7 +44,24 @@ compiler 中的 1-1 ~ 1-13
         1-3. 解析到结束标签，通过正则匹配后返回结果，并从html中移除该标签。将整个标签弹出栈，并将栈中最后一个元素作为当前父节点。
         1-4. 解析到文本之后，放入当前父节点的children中，并将文本从html中移除
         1-5. 最后整个遍历完，将root返回一个树就形成了。如images中的domTree.png
-    2. 生成render方法（render方法执行后的返回结果就是 虚拟DOM）
+    2. 将语法树 转成render方法（render方法执行后的返回结果就是 虚拟DOM）
+        2-1. render函数的返回值拼接 return _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))
+        2-2. ast语法树中有tag标签，有标签绑定的attrs属性，有其children子节点，有text文本
+        2-3. 将以上这几种分情况处理 拼接成render的返回值
+        2-4. 先拼接tag标签，再拼接该标签的属性，再拼接该节点的孩子
+            2-4-1. _c创建元素， _v创建文本， _s是变量转成字符串
+            2-4-2. 拼接属性：遍历当前节点属性attrs是个数组，把每一项通过字符串进行拼接；遇到style需要用大括号{style:{color:'red'}}。
+                将[{name: 'id', value: 'app'}] 转成 {id:"app"}；
+                将[{name: "style", value: {color: 'red', background: 'pink', "": undefined}}]转成{style:{"color":" red","background":" pink"}}
+            2-4-3. 拼接节点的孩子：遍历每一项，gen方法进行处理通过join拼接。
+                    对每一项处理
+                    如果是文本创建文本，如果是标签创建标签
+                    过程：1）先判断是文本还是标签，如果是标签调用codegen方法，拼接tag标签，再拼接该标签的属性，再拼接该节点的孩子
+                         2）如果是文本，分为纯文本和含有{{变量}}的文本; 
+                            2.1）通过正则匹配该文本中是否含有变量，如果没有，直接转成字符串拼接；
+                            2.2) 如果存在有变量，分三种情况处理。循环该文本正则匹配到值，并依次放入数组中tokens
+                                    如果匹配到的变量索引 > 最后一个索引值(默认0)，说明两个变量中间存在纯文本，需要通过slice截取出来放入tokens中
+                                    如果最后索引值 < text整个文本的总长度，说明后面还有纯文本，通过slice截取后面的字符放入tokens中
 
 
 

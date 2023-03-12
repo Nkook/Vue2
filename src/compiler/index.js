@@ -1,156 +1,147 @@
-// <div id="app">
-//    <div>{{name}}</div>
-//    <span>{{age}}</span>
-// </div>
-// 3. vue2采用正则 匹配标签 属性 表达式
-const ncname = `[a-zA-Z_][\\-\\.0-9_a-zA-Z]*`; // 匹配标签名<div></div>
-const qnameCapture = `((?:${ncname}\\:)?${ncname})`;
-const startTagOpen = new RegExp(`^<${qnameCapture}`); // 匹配到的分组是一个 标签名  <xxx 匹配到的是开始 标签的名字
-const endTag = new RegExp(`^<\\/${qnameCapture}[^>]*>`);  // 匹配的是</xxxx>  最终匹配到的分组就是结束标签的名字
-const attribute = /^\s*([^\s"'<>\/=]+)(?:\s*(=)\s*(?:"([^"]*)"+|'([^']*)'+|([^\s"'=<>`]+)))?/;  // 匹配属性 a = "123"
-// 第一个分组就是属性的key value就是分组3/分组4/分组5
-const startTagClose = /^\s*(\/?)>/;  // 匹配结束标签 </div> <br/>
-// const defaultTagRE = /\{((?:.|\r?\n)+?)\}\}/g  // 匹配到的内容就是表达式的变量{{aa}}
+// 将html转成ast语法树
+import { parseHTML } from "./parse";
 
-// vue3 采用的不是使用正则
+// 2-6
+const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g; // {{ asdsadsa }}  匹配到的内容就是我们表达式的变量
 
-// 对模版进行编译处理
-// 1-1
-function parseHTML(html) { // html最开始肯定是一个 <div   <div>hello</div>
-    //  1-13 最终需要转化成一颗抽象语法树，需要构建父子关系。
-    // 栈型结构，栈中的最后一个元素是当前匹配到开始标签的父亲。匹配到<div>放入栈；匹配到<div>放进栈，匹配到</div>结束标签时，再把<div>扔出去；匹配到<span>放入，匹配到</span>移除....
-    const ELEMENT_TYPE = 1; // 元素类型为1
-    const TEXT_TYPE = 3;    // 文本类型为3
-    const stack = []; // 用于存放元素的栈
-    let currentParent; // 指向的是栈中的最后一个
-    let root; // 是否是根节点
+// 2-2 遍历当前节点属性，把每一项通过字符串进行拼接；遇到style需要用大括号{style:{color:'red'}}
+function genProps(attrs) {
+    //attrs属性在ast树上是个数组[{name: 'style', value: 'color: red; background: pink;'}]
+    // 转成 {style:{"color":" red","background":" pink"}}
+    let str = ''// {name: value}
+    for (let i = 0; i < attrs.length; i++) {
+        let attr = attrs[i];
+        if (attr.name === 'style') {
+            // color:red;background:red => {color:'red', background:'red'}
+            let obj = {};
+            attr.value.split(';').forEach(item => { // 先通过分号分割成数组，再循环组成对象
+                let [key, value] = item.split(':');
+                obj[key] = value;
+            });
+            attr.value = obj
+        }
+        str += `${attr.name}:${JSON.stringify(attr.value)},` // [{name: 'id', value: 'app'}] 转成 {id:"app"}
+    }
+    return `{${str.slice(0, -1)}}` // 去除最后一个字符逗号
+}
+// 2-5 如果是文本创建文本，如果是标签创建标签
+// _c创建元素， _v创建文本， _s是变量转成字符串
+// 过程：1）先判断是文本还是标签，如果是标签调用codegen方法，拼接tag标签，再拼接该标签的属性，再拼接该节点的孩子
+//      2）如果是文本，分为纯文本和含有{{变量}}的文本; 
+//          2.1）通过正则匹配该文本中是否含有变量，如果没有，直接转成字符串拼接；
+//          2.2) 如果存在有变量，分三种情况处理。循环该文本正则匹配到值，并依次放入数组中tokens
+//                  如果匹配到的变量索引 > 最后一个索引值(默认0)，说明两个变量中间存在纯文本，需要通过slice截取出来放入tokens中
+//                  如果匹配到的变量索引为0，将匹配到的变量直接放入tokens中，并将最后索引值更新为 = 当前变量的索引值+当前变量的长度
+//                  如果最后索引值 < text整个文本的总长度，说明后面还有纯文本，通过slice截取后面的字符放入tokens中
+function gen(node) {
+    console.log('node', node)
+    if (node.type === 1) { // 标签，需要调用方法 去 拼接tag标签，再拼接该标签的属性，再拼接节点的孩子
+        return codegen(node);
+    } else { // 纯文本，需要分两种情况 {{name}}hello   呵呵
+        let text = node.text  
+        if (!defaultTagRE.test(text)) { // 是否是纯文本，如果是文本 什么都不用做，直接返回这个纯文本字符。defaultTagRE.test('hello') == false   defaultTagRE.test('{{name}}hello') == true
+            return `_v(${JSON.stringify(text)})`
+        } else {
+            //_v( _s(name)+'hello' + _s(age))
+            let tokens = [];
+            let match; // 匹配到的文本
+            defaultTagRE.lastIndex = 0; // 正则里面含有/g的话，exec每次用过之后需要重置位置，否则只能被捕获到一次
+            let lastIndex = 0;
+            // split
+            while (match = defaultTagRE.exec(text)) { // 通过正则匹配到有变量的文本赋值给match。 这里的text是{{name}}hello{{age}}
+                console.log('match', match) //  ['{{name}}', 'name', index: 0, input: '{{name}}hello{{age}}', groups: undefined]  ['{{age}}', 'age', index: 13, input: '{{name}}hello{{age}}', groups: undefined]
+                let index = match.index; // 匹配变量的位置: 比如第一个{{name}}位置是0，第二个{{age}}是13。 {{name}} hello {{age}} hello
+                if (index > lastIndex) { // 匹配的第二个变量的位置比上一次更新的位置大的话，说明两个变量之间存在文本，需要把文本放进去。
+                    tokens.push(JSON.stringify(text.slice(lastIndex, index))) // 截取 最后一次位置到当前第二个变量的位置就是中 纯文本
+                }
+                tokens.push(`_s(${match[1].trim()})`)
+                lastIndex = index + match[0].length // lastIndex等于当前匹配的位置加上当前匹配到变量的长度，就是整个文本最后一次的位置。 {{name}} hello {{age}}第一次index是0，长度是{{name}}8，最后一次位置更新为8
+            }
+            if (lastIndex < text.length) { // 最后匹配的位置小余整个文本的长度，需要把后面的纯文本放入
+                tokens.push(JSON.stringify(text.slice(lastIndex)))
+            }
+            console.log('tokens', tokens) //  ['_s(name)', '"hello"', '_s(age)']
+            return `_v(${tokens.join('+')})`
+        }
+    }
+}
+// 2-4 遍历子节点 
+function genChildren(children) {
+    return children.map(child => gen(child)).join(',')
+}
+// 2-1
+function codegen(ast) {
+    // 2-3 拼接子节点
+    let children = genChildren(ast.children);
+    // 2-1拼接tag标签，再拼接该标签的属性，再拼接节点的孩子
+    // _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))
+    let code = (`_c('${ast.tag}',${ast.attrs.length > 0 ? genProps(ast.attrs) : 'null'
+        }${ast.children.length ? `,${children}` : ''
+        })`)
 
-    // 最终需要转化成一颗抽象语法树：一个节点包含标签名称、类型、子元素、属性、父元素
-    function createASTElement(tag, attrs) {
-        return {
-            tag,
-            type: ELEMENT_TYPE,
-            children: [],
-            attrs,
-            parent: null
-        }
-    }
-    //  1-11 现在只是把标签文本删掉了，并没有做任何处理替换。对这些进行处理，需要这几个方法暴漏出去，在解析到开始标签、文本、结束标签的时候进行替换。
-    // 1-11-1遇到开始节点创建节点，没有根节点，就是树根；如果有父节点，那就设置为当前节点的父节点，并把当前节点作为父节点的孩子；将节点放入栈中，更更新为当前父节点
-    // 利用栈型结构 来构造一颗树
-    function start(tag, attrs) {
-        // console.log('开始标签', tag, attrs)
-        let node = createASTElement(tag, attrs) // 创造一个ast节点
-        if (!root) { // 看一下是否空树，如果没有root根节点，那么这个节点就作为树的根节点
-            root = node
-        }
-        if(currentParent){ // 如果当前父节点有值，将当前节点的父亲节点设置为currentParent
-            node.parent = currentParent; // 只赋予了parent属性
-            currentParent.children.push(node); // 还需要让父亲记住自己
-        }
-        stack.push(node) // 将节点放入栈中
-        currentParent = node; // currentParent作为栈中的最后一个节点
-    }
-    // 1-11-2 对于文本直接放入当前父节点的子节点中
-    function chars(text) { // 文本直接放到当前指向的节点中
-        console.log('文本', text, text.length)
-        text = text.replace(/\s/g,''); // 如果空格超过2就删除2个以上的
-        text && currentParent.children.push({
-            type:TEXT_TYPE,
-            text,
-            parent:currentParent
-        });
-    }
-    // 1-11-3 遇到结束标签，弹出该节点，并将最后一个节点更新为当前父节点
-    function end(tag) {
-        // console.log('结束标签', tag)
-        let node =  stack.pop();  // 遇到结束节点，弹出栈中最后一个。可以通过tag和node对比 校验标签是否合法
-       currentParent = stack[stack.length - 1]; // 更新当前父节点
-    }
-    // 1-4 
-    function advance(n) {
-        html = html.substring(n) // 截取的长度就是匹配到的开始标签的长度 '<div'
-    }
-    // 1-3 解析开始标签 并返回匹配的结果
-    function parseStartTag() {
-        const start = html.match(startTagOpen) // 用html通过正则匹配看是否是开始标签
-        // console.log('start', start) // ['<div', 'div', index: 0, input: '<div id="app">\n        <div>{{name}}</div>\n        <span>{{age}}</span>\n    </div>', groups: undefined]
-        if (start) { // 如果匹配到了就是开始标签：把结果组成一个对象，把标签名、对应的属性放进去
-            const match = {
-                tagName: start[1], // 标签名
-                attrs: [] // 属性
-            }
-            // console.log(match) // {tagName: 'div', attrs: Array(0)}
-            // 1-4 需要对html不停的解析，已经解析过的要删除掉。比如，解析了开始标签，把<div>删除掉，再解析 id='app'属性。所以要有个删除的过程，写个方法，叫前进，前进长度就是匹配到的内容的总长度
-            advance(start[0].length);
-            // console.log(start[0], html) // 打印可以看到匹配一段就少一段 <div   id="app"><div>{{name}}</div><span>{{age}}</span></div>
-            
-            // 1-5 匹配属性：只要不是开始标签的结束!html.match(startTagClose，就一直匹配下去；拿到每次匹配的属性html.match(attribute)放到数组attr中。删除掉匹配的属性
-            let attr, end
-            while (!(end = html.match(startTagClose)) && (attr = html.match(attribute))) {
-                advance(attr[0].length); // id="app"就删掉了
-                // 1-6 需要把属性解析出来放到attrs属性中去
-                match.attrs.push({ name: attr[1], value: attr[3] || attr[4] || attr[5] || true })
-            }
-            // 也应该把结束标签>删掉, 如果end有值就删除
-            if (end) {
-                advance(end[0].length);
-            }
-            return match
-            // 1-6
-            // console.log(match) // {tagName: 'div', attrs: [{name: 'id', value: 'app'}]}
-        }
-
-        // 否则不是开始标签
-        return false
-    }
-    // debugger 可以看整个过程
-    // 1-2 整个过程：遇到开始标签解析开始标签，遇到文本解析文本，遇到结束标签解析结束标签
-    while(html) { // 每解析一个标签就把它从这个字符串中删除掉，整个模版字符串都没有了就解析完了 // while : 在…. 期间， 所以 while循环 就是在满足条件期间，重复执行某些代码。 continue：结束本次循环，继续下次循环。break：跳出所在的循环
-        // 如果textEnd 为0 说明是一个开始标签或者结束标签 如： <div>hello</div>
-        // 如果textEnd > 0说明就是文本的结束位置
-        let textEnd = html.indexOf('<') // 如果indexof中的索引是0 则说明是个标签
-        // 1-2 解析标签
-        if (textEnd == 0) {
-            // 1-3
-            const startTagMatch = parseStartTag() // 解析开始标签 // 开始标签的匹配结果: 先匹配开始标签，再匹配属性，再匹配结束标签；并把已经匹配到的从html模版字符中删除掉；返回匹配到的结果对象{tagName: 标签名, attrs: 属性}
-            // 1-7 如果是【开始标签】有值，跳过本轮操作，继续再往下走
-            if (startTagMatch) { // 解析到的开始标签
-                // 1-12
-                start(startTagMatch.tagName, startTagMatch.attrs)
-                // console.log(html) // 这个时候看到还是开始标签 <div>{{name}}</div><span>{{age}}</span></div>
-                continue // 为啥跳出本次循环，因为开始标签移除后，再重新循环html去找结束标签就好了。下面的代码就不再走了，如果不写，就走到下面解析文本了
-            }
-            
-            // 1-9 如果不是开始标签，就是【结束标签】。匹配到后直接删除
-            let endTagMatch = html.match(endTag); // 通过正则匹配结束标签，返回当前结束标签的名字
-            if (endTagMatch) { // 如果有值就删除掉
-                advance(endTagMatch[0].length);
-                // 1-12
-                end(endTagMatch[1])
-                continue;
-            }
-        }
-        // 1-8 解析【文本】内容
-        if (textEnd > 0) {
-            let text = html.substring(0, textEnd); // 文本内容
-            if (text) {
-                // 1-12
-                chars(text)
-                advance(text.length); // 解析到的文本 
-            }
-        }
-    }
-    console.log('root', root)
-    return root
-    // console.log(html, '====')
+    return code;
 }
 
 
 export function compileToFunction(template) {
     // 1. 将template转化成ast语法树（模版针对的就是上面的内容：对于标签解析的是标签名、文本、表达式、属性、字符串等）
     let ast = parseHTML(template)
-    // 2. 生成render方法（render方法执行后的返回结果就是 虚拟DOM）
+    // 2. 将语法树 转成render方法（render方法执行后的返回结果就是 虚拟DOM）
+    console.log(ast)
+    // 2-1
+    console.log('111', codegen(ast))
 
-    // console.log(template)
+    // 生成一个函数，叫render函数，参数h，里面需要创建个div，div有自己的属性；还有自己的儿子及其属性；还有个表达式文本内容，表达式可能是对象，先JSON.stringify转成字符串
+    // 创建一个元素_c，
+    // 元素有个儿子叫div,属性叫id: app；有一个儿子叫div属性叫style:{color: 'red'}；儿子里面放的是个变量可能是字符串，先JSON.stringify转正字符串，再拼接hello
+    // 还有一个儿子叫span，没有属性，有个变量叫age
+    // 实现_c  _v  _s方法就可以了。最终把ast树组装成下面这样的语法就结束了
+    // 先不考虑render函数，可以通过new Function 生成函数，先考虑这个返回值。
+    // render() {
+    //     return _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))
+    // }
+    
 }
+
+
+// ast树
+// {tag: 'div', type: 1, children: Array(2), attrs: Array(1), parent: null}
+//     attrs: Array(1)
+//         0: {name: 'id', value: 'app'}
+//         length: 1
+//         [[Prototype]]: Array(0)
+//     children: Array(2)
+//         0: {tag: 'div', type: 1, children: Array(1), attrs: Array(1), parent: {…}}
+//         1: {tag: 'span', type: 1, children: Array(1), attrs: Array(0), parent: {…}}
+//         length: 2
+//         [[Prototype]]: Array(0)
+//     parent: null
+//     tag: "div"
+//     type: 1
+//     [[Prototype]]: Object
+
+// children
+// children: Array(2)
+//     0:
+//         attrs: Array(1)
+//             0:
+//                 name: "style"
+//                 value: {color: ' red', background: ' pink', "": undefined}
+//                 [[Prototype]]: Object
+//                 length: 1
+//                 [[Prototype]]: Array(0)
+//         children: Array(1)
+//             0: {type: 3, text: '{{name}}hello{{age}}', parent: {…}}
+//             length: 1
+//             [[Prototype]]: Array(0)
+//         parent: {tag: 'div', type: 1, children: Array(2), attrs: Array(1), parent: null}
+//         tag: "div"
+//         type: 1
+//         [[Prototype]]: Object
+//     1: {tag: 'span', type: 1, children: Array(1), attrs: Array(0), parent: {…}}
+//     length: 2
+//     [[Prototype]]: Array(0)
+//     parent: null
+//     tag: "div"
+//     type: 1
+//     [[Prototype]]: Object
