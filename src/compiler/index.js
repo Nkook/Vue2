@@ -90,10 +90,10 @@ export function compileToFunction(template) {
     // 2. 将语法树 转成render方法（render方法执行后的返回结果就是 虚拟DOM）
     // 2-1 
     let code = codegen(ast) // 拿到的是字符串，想让字符串运行
-    // console.log('code', code)
-    
+    // console.log('code', code) //  _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))
+
     // 2-7 模板引擎的实现原理 就是 with  + new Function
-    code = `with(this){return ${code}}` // with为了取值方便，this是谁就从谁身上取值。对象属性直接变成了with作用域下的
+    code = `with(this){return ${code}}` // 将编译后的结果包装成with。with为了取值方便，this是谁就从谁身上取值。对象属性直接变成了with作用域下的
     let render = new Function(code) // 根据字符串生成render函数
     
     // console.log(render.toString()) 打印结果如下

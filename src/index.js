@@ -2,6 +2,7 @@
 // vue通过构造函数的方式，在其构造函数prototype上去添加方法，可以在多个文件去操作
 
 import { initMixin } from "./init"
+import { lifecycle } from "./lifecycle"
 
 function Vue(options) { // options就是用户的选项
     this._init(options) // 默认就调用了init

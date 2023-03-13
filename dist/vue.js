@@ -429,10 +429,10 @@
       // 2. 将语法树 转成render方法（render方法执行后的返回结果就是 虚拟DOM）
       // 2-1 
       let code = codegen(ast); // 拿到的是字符串，想让字符串运行
-      // console.log('code', code)
+      // console.log('code', code) //  _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))
 
       // 2-7 模板引擎的实现原理 就是 with  + new Function
-      code = `with(this){return ${code}}`; // with为了取值方便，this是谁就从谁身上取值。对象属性直接变成了with作用域下的
+      code = `with(this){return ${code}}`; // 将编译后的结果包装成with。with为了取值方便，this是谁就从谁身上取值。对象属性直接变成了with作用域下的
       let render = new Function(code); // 根据字符串生成render函数
 
       // console.log(render.toString()) 打印结果如下
@@ -503,12 +503,143 @@
     //     type: 1
     //     [[Prototype]]: Object
 
+    // 专门用于构建虚拟dom的方法
+
+    // 1. h()  _c() 创建元素的虚拟节点
+    function createElementVNode(vm, tag, data, ...children) {
+      if (data == null) {
+        data = {};
+      }
+      let key = data.key; // 属性的key值
+      if (key) {
+        delete data.key;
+      }
+      return vnode(vm, tag, key, data, children); // 虚拟节点上有vm实例，标签，key，属性，孩子
+    }
+    // 3. _v();  创建文本的虚拟节点
+    function createTextVNode(vm, text) {
+      return vnode(vm, undefined, undefined, undefined, undefined, text);
+    }
+    // 和ast一样吗？ ast做的是语法层面的转化 他描述的是语法本身 (可以描述js css html)
+    // 2. 我们的虚拟dom 是描述的dom元素，可以增加一些自定义属性  (描述dom的)
+    // diff算法中有key
+    function vnode(vm, tag, key, data, children, text) {
+      return {
+        vm,
+        tag,
+        key,
+        data,
+        children,
+        text
+        // .... 事件 插槽 指令
+      };
+    }
+
+    // 1-6 导入定义好的创建元素节点和文本节点的方法
+
+    // 1-9 根据虚拟节点创建新的真节点
+    function createElm(vnode) {
+      let {
+        tag,
+        data,
+        children,
+        text
+      } = vnode;
+      // 先根据标签创建
+      if (typeof tag === 'string') {
+        // 标签
+        vnode.el = document.createElement(tag); // 创建标签并赋值到虚拟节点上：这里将真实节点和虚拟节点对应起来，后续如果修改属性了，可以直接找到虚拟节点对应的真实节点
+        patchProps(vnode.el, data); // 更新这个标签上的属性
+        children.forEach(child => {
+          // 标签的孩子
+          vnode.el.appendChild(createElm(child));
+        });
+      } else {
+        // 文本
+        vnode.el = document.createTextNode(text); // 创建文本并赋值到虚拟节点上
+      }
+
+      return vnode.el; // 返回真实节点
+    }
+    // 1-10 更新属性
+    function patchProps(el, props) {
+      for (let key in props) {
+        if (key === 'style') {
+          // style{color:'red'}
+          for (let styleName in props.style) {
+            el.style[styleName] = props.style[styleName];
+          }
+        } else {
+          el.setAttribute(key, props[key]);
+        }
+      }
+    }
+
+    // 1-8 既有渲染又有更新：更新传老的虚拟节点，同时传入新的节点
+    function patch(oldVNode, vnode) {
+      // 需要把原来的给删掉，创建一个新的
+      // 写的是初渲染流程 
+      const isRealElement = oldVNode.nodeType;
+      if (isRealElement) {
+        // 如果有真实节点
+        const elm = oldVNode; // 获取真实元素
+        const parentElm = elm.parentNode; // 拿到父元素
+        // 1-11
+        let newElm = createElm(vnode); // 根据虚拟节点创建新的真节点
+        parentElm.insertBefore(newElm, elm.nextSibling); // 找个原来节点的下一个节点，并把新的放入老节点的下面。
+        parentElm.removeChild(elm); // 删除老节点
+
+        return newElm;
+      }
+    }
+
     // 导出lifecycle
+    function lifecycle(Vue) {
+      // 在Vue原型上扩展两个方法，下面的vm实例就可以调用
+
+      //  1-2 1-7 将vnode转化成真实dom
+      Vue.prototype._update = function (vnode) {
+        console.log('update', vnode);
+        const vm = this;
+        const el = vm.$el;
+
+        // 1-7 patch既有初始化的功能  又有更新 
+        vm.$el = patch(el, vnode); // 用vnode创建真实的dom，替换掉原来的el
+      };
+
+      // 这几个方法都和虚拟节点及后面的diff算法有关，把这些方法都移到一个包里，vdom文件中
+      // 1-3  _c('div',{},...children) _c创建元素节点
+      Vue.prototype._c = function () {
+        return createElementVNode(this, ...arguments); // 实例和参数
+      };
+      // 1-4  _v(text)  _v创建文本节点
+      Vue.prototype._v = function () {
+        return createTextVNode(this, ...arguments);
+      };
+      // 1-5  _s是变量转成字符串
+      Vue.prototype._s = function (value) {
+        if (typeof value !== 'object') return value;
+        return JSON.stringify(value);
+      };
+
+      // 1-1 渲染虚拟dom
+      //  执行render的时候，会执行里面的v c s方法，并去vm上取值
+      Vue.prototype._render = function () {
+        // 当渲染的时候会去实例中取值，我们就可以将属性和视图绑定在一起
+        return this.$options.render.call(this); // 这里的render是通过ast语法转义后生成的render方法如下注释部分。让with中的this指向vm。此时执行会报错因为_v,_c,_s方法都未定义，需要定义。
+      };
+    }
+    // render
+    // ƒ anonymous(
+    //     ) {
+    //     with(this){return _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))}
+    //     }
 
     // 导出mountComponent方法
-    function mountComponent() {
+    function mountComponent(vm, el) {
+      // 这里的el 是通过querySelector处理过的
+      vm.$el = el; // 把el挂载到vm实例上
       // 1.调用render方法产生虚拟节点 虚拟DOM
-
       vm._update(vm._render()); // vm.$options.render() 执行编译好的render方法，执行完后返回虚拟节点。vm._update方法是把虚拟节点变成真实节点
 
       // 2.根据虚拟DOM产生真实DOM 
@@ -581,7 +712,7 @@
 
         // 7-3 初步渲染 调用render方法
         // 把当前的vm实例上的render调用一下，产生虚拟dom，再把虚拟dom渲染到el中去
-        mountComponent(); // 组件的挂载，挂载实例，实例里有render方法，挂载到元素el上
+        mountComponent(vm, el); // 组件的挂载，挂载实例，实例里有render方法，挂载到元素el上
 
         // script 标签引用的vue.global.js 这个编译过程是在浏览器运行的
         // runtime运行时是不包含模版编译的，整个编译时打包的时候通过loader来转义.vue文件的。用runtime的时候不能使用模版（指的是template: '<div>hello</div>'属性）

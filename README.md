@@ -36,7 +36,7 @@ Vue2源码学习
 上面首先把状态initState初始化完成了，
 看是否有el模版，将其挂载到vm实例上；
 写挂载方法，判断如果没有render需要去拿到el模版转成render，如果有render直接赋值给vm.$options。
-compiler 中的 1-1 ~ 1-13
+compiler 中parse.js的 1-1 ~ 1-13  index.js中的2-1 ～ 2-7
 如何将template模版编译成render函数：
     1. 将template转化成ast语法树（对标签名、文本、表达式、属性、字符串等编译解析成树）
         1-1. 对模版进行编译：遍历整个html，遇到开始标签解析开始标签，遇到文本解析文本，遇到结束标签解析结束标签；每解析一个就从html中移除掉，知道html为空，就结束遍历。
@@ -63,5 +63,37 @@ compiler 中的 1-1 ~ 1-13
                                     如果匹配到的变量索引 > 最后一个索引值(默认0)，说明两个变量中间存在纯文本，需要通过slice截取出来放入tokens中
                                     如果最后索引值 < text整个文本的总长度，说明后面还有纯文本，通过slice截取后面的字符放入tokens中
 
+        2-5. 以上4步拼接好了字符串，也就是render函数的返回值。根据字符串生成render函数，并返回render函数。
+        2-6. 将render函数赋值到 实例的选项vm.$options上
+
+六、实现虚拟dom转真实dom
+    1. 在初始化init.js中 初步渲染mountComponent，调用render方法
+        把当前的vm实例上的render调用一下，产生虚拟dom，再把虚拟dom渲染到el元素(#app)中去
+    2. 进入lifecycle.js，vm._update(vm._render())
+        1. 调用render方法产生虚拟节点 虚拟DOM
+            1.1 vm._render()函数执行完成后返回虚拟dom
+            1.2 执行_render函数会报错因为里面的_v,_c,_s方法都未定义，需要定义。
+            1.3 _c创建元素节点方法，_v创建文本节点，_s是变量转成字符串
+                1.3.1 创建元素虚拟节点，返回vnode(vm, tag, key, data, children); // 虚拟节点上有vm实例，标签，key，属性，孩子
+                1.3.2 创建文本虚拟节点，返回vnode(vm, undefined, undefined, undefined, undefined, text);
+                1.3.3 虚拟节点一共有这几项：vnode(vm, tag, key, data, children, text)
+                1.3.4 执行完后返回整个虚拟dom
+
+        2. 根据虚拟DOM产生真实DOM 
+            2.1 vm._update()方法是把虚拟节点变成真实节点
+            2.2 用虚拟vnode dom，创建真实的dom，替换掉原来的el。vm.$el = patch(el,vnode);
+            2.3 patch方法：既有渲染又有更新：更新传老的虚拟节点，同时传入新的节点
+                2.3.1 如果有真实节点，拿到真实节点的父元素，
+                2.3.2 根据虚拟节点创建createElm新的真节点
+                    2.3.2.1 新节点创建：创建标签，更新标签的属性，创建文本，创建标签的子节点。
+                2.3.3 创建好newElm新节点，将新节点插入到原来老节点的后面，再删掉原来的老节点
+            2.4 将新节点返回出去
+
+        3. 插入到el元素中
+            vm.$el = patch(el,vnode); // 用vnode创建真实的dom，替换掉原来的el
+    
+    
+    
+    
 
 
