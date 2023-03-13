@@ -1,6 +1,7 @@
 import { initState } from "./state"
 // import { compileToFunction } from "./compiler/index" // 安装插件后就不需要写index了，会默认找
 import { compileToFunction } from "./compiler"
+import { mountComponent } from "./lifecycle" // 导入生命周期
 
 export function initMixin(Vue) { // 就是给Vue增加init方法
     Vue.prototype._init = function(options) { // 用于初始化操作
@@ -39,12 +40,23 @@ export function initMixin(Vue) { // 就是给Vue增加init方法
             console.log(template) // <div id="app"><div>{{name}}</div><span>{{age}}</span></div>
             // 需要将模版编译成render函数
             if (template) {
-                const render = compileToFunction(template) // 把模版放进来
+                const render = compileToFunction(template) // 把模版放进来，把模板变成了render函数
                 ops.render = render // jsx最终会被编译成h('xxx'), jsx是靠babel做的编译，有个插件plugin。？？？
             }
         }
-        // （2）赋值render到vm.$options上
+        // （2）如果有render函数，直接赋值render到vm.$options上
         ops.render // 最终可以获取render方法
+
+
+        console.log('render', ops.render)
+        // ƒ anonymous(
+        //     ) {
+        //     with(this){return _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))}
+        //     }
+
+        // 7-3 初步渲染 调用render方法
+        // 把当前的vm实例上的render调用一下，产生虚拟dom，再把虚拟dom渲染到el中去
+        mountComponent(vm, el); // 组件的挂载，挂载实例，实例里有render方法，挂载到元素el上
 
         // script 标签引用的vue.global.js 这个编译过程是在浏览器运行的
         // runtime运行时是不包含模版编译的，整个编译时打包的时候通过loader来转义.vue文件的。用runtime的时候不能使用模版（指的是template: '<div>hello</div>'属性）

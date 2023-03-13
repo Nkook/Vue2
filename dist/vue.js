@@ -425,10 +425,25 @@
     function compileToFunction(template) {
       // 1. 将template转化成ast语法树（模版针对的就是上面的内容：对于标签解析的是标签名、文本、表达式、属性、字符串等）
       let ast = parseHTML(template);
-      // 2. 将语法树 转成render方法（render方法执行后的返回结果就是 虚拟DOM）
       console.log(ast);
-      // 2-1
-      console.log('111', codegen(ast));
+      // 2. 将语法树 转成render方法（render方法执行后的返回结果就是 虚拟DOM）
+      // 2-1 
+      let code = codegen(ast); // 拿到的是字符串，想让字符串运行
+      // console.log('code', code)
+
+      // 2-7 模板引擎的实现原理 就是 with  + new Function
+      code = `with(this){return ${code}}`; // with为了取值方便，this是谁就从谁身上取值。对象属性直接变成了with作用域下的
+      let render = new Function(code); // 根据字符串生成render函数
+
+      // console.log(render.toString()) 打印结果如下
+      // function anonymous(
+      //     ) {
+      //     with(this){return _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))}
+      //     }
+      // 通过call改变this指向vm
+      // render.call(vm)
+
+      return render;
 
       // 生成一个函数，叫render函数，参数h，里面需要创建个div，div有自己的属性；还有自己的儿子及其属性；还有个表达式文本内容，表达式可能是对象，先JSON.stringify转成字符串
       // 创建一个元素_c，
@@ -440,6 +455,11 @@
       //     return _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))
       // }
     }
+
+    // let obj = {}
+    // with(obj) {
+    //     console.log(this.a) // 这里的this就是obj,使用with时，里面的取值都会从obj上取
+    // }
 
     // ast树
     // {tag: 'div', type: 1, children: Array(2), attrs: Array(1), parent: null}
@@ -483,6 +503,27 @@
     //     type: 1
     //     [[Prototype]]: Object
 
+    // 导出lifecycle
+
+    // 导出mountComponent方法
+    function mountComponent() {
+      // 1.调用render方法产生虚拟节点 虚拟DOM
+
+      vm._update(vm._render()); // vm.$options.render() 执行编译好的render方法，执行完后返回虚拟节点。vm._update方法是把虚拟节点变成真实节点
+
+      // 2.根据虚拟DOM产生真实DOM 
+
+      // 3.插入到el元素中
+    }
+
+    // vue核心流程 
+    // 1） 创造了响应式数据  
+    // 2） 模板转换成ast语法树  
+    // 3) 将ast语法树转换了render函数 
+    // 4) 后续每次数据更新可以只执行render函数 (无需再次执行ast转化的过程) // 通过传入不同的数据，render函数就可以返回不同的虚拟节点。
+    // render函数会去产生虚拟节点（使用响应式数据）
+    // 根据生成的虚拟节点创造真实的DOM
+
     function initMixin(Vue) {
       // 就是给Vue增加init方法
       Vue.prototype._init = function (options) {
@@ -525,12 +566,22 @@
           console.log(template); // <div id="app"><div>{{name}}</div><span>{{age}}</span></div>
           // 需要将模版编译成render函数
           if (template) {
-            const render = compileToFunction(template); // 把模版放进来
+            const render = compileToFunction(template); // 把模版放进来，把模板变成了render函数
             ops.render = render; // jsx最终会被编译成h('xxx'), jsx是靠babel做的编译，有个插件plugin。？？？
           }
         }
-        // （2）赋值render到vm.$options上
+        // （2）如果有render函数，直接赋值render到vm.$options上
         ops.render; // 最终可以获取render方法
+
+        console.log('render', ops.render);
+        // ƒ anonymous(
+        //     ) {
+        //     with(this){return _c('div',{id:"app"},_c('div',{style:{"color":" red","background":" pink"}},_v(_s(name)+"hello"+_s(age))),_c('span',null,_v(_s(age))))}
+        //     }
+
+        // 7-3 初步渲染 调用render方法
+        // 把当前的vm实例上的render调用一下，产生虚拟dom，再把虚拟dom渲染到el中去
+        mountComponent(); // 组件的挂载，挂载实例，实例里有render方法，挂载到元素el上
 
         // script 标签引用的vue.global.js 这个编译过程是在浏览器运行的
         // runtime运行时是不包含模版编译的，整个编译时打包的时候通过loader来转义.vue文件的。用runtime的时候不能使用模版（指的是template: '<div>hello</div>'属性）
@@ -545,6 +596,9 @@
 
     // 把原型方法扩展成一个个函数
     initMixin(Vue); // 扩展了init方法
+
+    // 接入lifecycle.js
+    lifecycle(Vue); // 扩展lifecycle方法
 
     return Vue;
 

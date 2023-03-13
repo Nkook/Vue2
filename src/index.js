@@ -10,4 +10,7 @@ function Vue(options) { // options就是用户的选项
 // 把原型方法扩展成一个个函数
 initMixin(Vue) // 扩展了init方法
 
+// 接入lifecycle.js
+lifecycle(Vue) // 扩展lifecycle方法
+
 export default Vue
