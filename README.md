@@ -92,7 +92,16 @@ compiler 中parse.js的 1-1 ~ 1-13  index.js中的2-1 ～ 2-7
         3. 插入到el元素中
             vm.$el = patch(el,vnode); // 用vnode创建真实的dom，替换掉原来的el
     
-    
+
+中间总结：1. 在vue渲染中会将data中的数据变成响应式的数据，调用initState，针对对象会对所有的属性进行Object.defineProperty增加get和set，还会针对数组重写数组方法。
+        2. template模板编译，将模板先转换成ast语法树，通过正则匹配标签，解析属性，标签名，文本；将ast语法树生成render方法（会把html模板转成js语法），调用render可以创建虚拟dom
+        3. 调用render函数会进行取值操作，产生对应的虚拟dom。取值会触发get方法
+        4. 将虚拟dom渲染成真实dom，根据数据创建一个最新的虚拟dom。
+
+现在的更新是比较暴力的，数据变了之后，用户需要手动调用更新渲染方法。
+期望数据变化后，可以自己重新渲染。
+
+
     
     
 
