@@ -31,7 +31,7 @@ Vue2源码学习
 6-1～6-6
 重写数组的方法，并且去观测数组中的每一项，如果是数组的话，需要去针对数组新增的属性去做判断，并且把新增的每一项再去做观测。
 
-五、
+五、将template转化成ast语法树; 将语法树 转成render方法; render方法执行后的返回结果就是 虚拟DOM
 7-1~7-2
 上面首先把状态initState初始化完成了，
 看是否有el模版，将其挂载到vm实例上；
@@ -95,13 +95,49 @@ compiler 中parse.js的 1-1 ~ 1-13  index.js中的2-1 ～ 2-7
 
 中间总结：1. 在vue渲染中会将data中的数据变成响应式的数据，调用initState，针对对象会对所有的属性进行Object.defineProperty增加get和set，还会针对数组重写数组方法。
         2. template模板编译，将模板先转换成ast语法树，通过正则匹配标签，解析属性，标签名，文本；将ast语法树生成render方法（会把html模板转成js语法），调用render可以创建虚拟dom
-        3. 调用render函数会进行取值操作，产生对应的虚拟dom。取值会触发get方法
-        4. 将虚拟dom渲染成真实dom，根据数据创建一个最新的虚拟dom。
+        3. 调用render函数会进行取值操作 render(){_c('div', null, _v(name))}，产生对应的虚拟dom。取值会触发get方法
+        4. vm._update()将虚拟dom渲染成真实dom，根据数据创建一个最新的虚拟dom。
+        // _render()函数根据数据创建最新的虚拟DOM节点（使用响应式数据）
+        // _update()根据生成的虚拟节点创造真实的DOM,重新渲染    
 
 现在的更新是比较暴力的，数据变了之后，用户需要手动调用更新渲染方法。
 期望数据变化后，可以自己重新渲染。
 
+七、模板中数据的依赖收集：模板中使用了name和age，如果name和age更新了，视图就自动渲染。
+    思路：
+        1. 在模板里使用到了name数据，当name更新了，就需要重新渲染模板。（dist/3.index.html 中的手动调用vm._update(vm._render())）这样的更新是比较暴力的，数据变了之后，用户需要手动调用更新渲染方法。
 
+        期望数据变化后，可以自己重新渲染。
+        2. 首先要知道模板中用到了哪些属性，我们可以给模板中的属性，每个都增加一个收集器 dep。这个dep中会存着vm._update(vm._render())这个渲染逻辑。假如name变化了，就去执行name的dep，去重新走渲染逻辑。
+
+        3.页面渲染的时候 我们将渲染逻辑vm._update(vm._render()) 封装到watcher中; 让dep记住这个watcher即可， 稍后属性变化了可以找到属性对应的dep中存放的watcher进行重新渲染
+
+    步骤：
+        1. 新建一个watcher类watcher.js，将vm._update(vm._render())封装进去
+            1-1. 会有多个组件使用同一个属性，一个组件的属性变了，其它组件是不需要变的。那么就需要每次创建一个watcher都给一个唯一的id。不同的组件有不同的watcher，每个组件都会去new这 个watcher。然后调用vm._update(vm._render())进行取值渲染。
+            1-2. 需要给每个属性增加dep为了收集watcher，dep增加个变量叫target暴漏在全局上。
+                 默认在需要渲染的时候会new创建一个watcher，并把当前的watcher赋值给全局变量Dep.target上，之后页面vm._render()的时候会对属性进行取值，会走get()方法，取值的时候判断Dep.target有值，就让当前属性的dep记住这个渲染watcher，就把这个watcher收集起来放入到subs栈中。这样当前属性的dep就和每个watcher关联起来了。视图渲染完成后要清空Dep.target。
+                【只会对用到的属性进行依赖收集，用不到就不收集。
+                  只有在模板里用到的属性才会做依赖收集。
+                  首页渲染会收集，再次更新还会收集。】
+            1-3. 如果页面上同一个属性用了两次，那么取值两次的话，会对这个属性进行重复收集。同一个dep里收集两个相同的watcher是不行的。
+                对watcher进行去重。并且，dep收集watcher的同时，让watcher也记录dep。他俩是多对多的关系
+                让watcher也记录dep，双向记录收集是为了：如组件卸载的时候，让watcher清理掉所有的响应式数据。
+                1）当取值的时候调用depend()，addDep()将当前属性的dep传入，在watcher里收集dep，会让watcher记住dep，
+                2）同时，addSub()将当前watcher传入，告诉dep也记住watcher。同时进行了去重。
+
+            1-4. 更新属性的时候，就会走到index.js中的set方法。让该属性的dep去更新视图。
+                 调用update，再去走get()vm._update(vm._render())进行更新渲染
+
+            1-5. npm run dev 打包后看3.index.html，过1秒后页面数据更新成jw 30
+            
+
+                
+
+
+
+
+ 
     
     
 

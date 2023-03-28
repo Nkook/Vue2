@@ -1,4 +1,5 @@
 import { newArrayProto } from './array'
+import Dep from './dep'
 
 export function observe(data) {
     // 对data这个对象进行劫持
@@ -58,10 +59,17 @@ class Observer {
 export function defineReactive(target, key, value) { // 属性劫持。闭包，里面的函数使用外面的value，这个变量不能被销毁
     // 5-8 深度属性劫持。针对某个属性值还是个对象
     observe(value) // 对所有的对象都进行属性劫持。
+    // 在第10节课：lifecycle.js给每个属性增加dep: 有了dep也有了watcher，如何让他俩关联起来
+    // 10-1
+    let dep = new Dep()
     // 5-4
     Object.defineProperty(target, key, {
         get() { // 取值的时候会执行get
             console.log('用户取值了')
+            // 10-2 属性的dep收集watcher
+            if(Dep.target){
+                dep.depend(); // 让这个属性的收集器记住当前的watcher；去dep.js中增加个方法depend
+            }
             return value
         },
         set(newValue) { // 修改的时候会执行set
@@ -69,6 +77,8 @@ export function defineReactive(target, key, value) { // 属性劫持。闭包，
             if (newValue === value) return
             observe(newValue) // 5-9 如果修改值的时候直接赋值个对象，对这个对象里的每个属性进行劫持
             value = newValue
+            // 10-3 属性更新 让dep去更新视图
+            dep.notify() // 通知更新
         }
     })
 

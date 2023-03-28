@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <!-- 2. 我们可以给模板中的属性 每个都增加一个收集器 dep。
+                这个dep中会存着vm._update(vm._render())这个渲染逻辑
+                假如name变化了，就去执行name的dep，也就是重新走渲染逻辑
+    -->
+    <!-- 页面渲染的时候 我们将渲染逻辑封装到watcher中   vm._update(vm._render());-->
+    <!-- 让dep记住这个watcher即可， 稍后属性变化了可以找到对应的dep中存放的watcher进行重新渲染 -->
+    <!-- 观察者模式 -->
+    <div id="app">
+        <div style="color: red;background: pink;">{{name}} hello {{age}}</div>
+        <span>{{age}}</span>
+    </div>
+    <script src="vue.js"></script>
+    <script>
+        // 创建一个vue的实例
+        const vm = new Vue({
+            data: { // 代理数据
+                name: 'xiao',
+                age: 20,
+                adress: {
+                    content: '通州',
+                    num: 30
+                },
+                hobby: ['eat', 'drink', {a: 1}]
+            },
+            // 对模版进行编译
+            el: '#app', // 将数据 解析道 el元素上。就是将页面上的name和age进行个替换
+            
+        })
+
+        // 1. 属性和我们的视图关联起来 做到数据变化可以自动更新视图 （观察者模式）
+        setTimeout(() => {
+            vm.name = 'jw';
+            vm.age = 30
+            // 2. 把这个方法封装成一个watcher方法 也是个类
+            // vm._update(vm._render()); // 现在的更新是比较暴力的，数据变了之后，用户需要手动调用更新渲染方法，如果不调用页面不会更新。期望数据变化后，可以自己重新渲染。
+
+        }, 1000)
+
+        // 【之前1-9视频课程实现到虚拟dom转成真实dom】
+        // 1) 将数据先处理成响应式 initState (针对对象来说主要是增加defineProperty 针对数组就是重写方法)
+        // 2) 模板编译：将模板先转换成ast语法树， 将ast语法树生成**render**方法
+        // 3) 调用render函数 会进行取值操作 产生对应的虚拟DOM render(){ _c('div',null, _v(name))}  触发get方法
+        // 4) 将虚拟dom渲染成真实dom
+
+        // 【10 实现vue中的依赖收集】
+        // 主要是以下三个方法
+        // 1）.观察者模式实现依赖收集（数据变化了，自动去更新视图不需要手动去更新）
+        // 2）.异步更新策略（频繁修改导致频繁渲染，通过批量更新解决）
+        // 3）.mixin的实现原理
+
+    </script>
+</body>
+</html>

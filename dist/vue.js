@@ -50,6 +50,44 @@
       };
     });
 
+    // 首次渲染的时候会收集， 更新的时候会再次收集。
+    // 只有在模板里取值的时候，才会做依赖收集。
+
+    let id$1 = 0;
+    // 8-1. 每个属性都有dep，创建一个类
+    class Dep {
+      constructor() {
+        this.id = id$1++; // 属性的dep要收集watcher；每次执行id就++
+        this.subs = []; // 这里存放着当前属性对应的watcher有哪些; 一个属性可能有多个watcher（一个属性可以在a组件用，b组件用...）；
+        // 8-3 
+        // 此时再去boserve/index.js中给每个属性增加dep，let dep = new Dep()
+        // 有了dep也有了watcher，如何让他俩关联起来？可以把当前的watcher暴漏在全局上；Dep.target = null;
+        // 在watcher.js中把当前的watcher赋值给全局变量Dep.target
+      }
+      // 8-5
+      depend() {
+        // 这里我们不希望放重复的watcher，而且刚才只是一个单向的关系 dep收集-> watcher；也希望 watcher记录 ->dep
+        // watcher 记录dep
+        // this.subs.push(Dep.target); // 把当前的watcher放入这个栈中。这样存在重复
+
+        Dep.target.addDep(this); // 让当前watcher（Dep.target）记住dep。 在watcher.js中实现这个方法。
+
+        // 8-7
+        // dep 和 watcher是一个多对多的关系 （一个属性可以在多个组件中使用 dep -> 多个watcher）
+        // 一个组件中由多个属性组成 （一个watcher 对应多个dep）
+      }
+      // 8-6
+      addSub(watcher) {
+        this.subs.push(watcher); // 将watcher放入subs
+      }
+      // 8-8
+      notify() {
+        this.subs.forEach(watcher => watcher.update()); // 告诉watcher要更新了，让这里subs所有记住的依赖都调用更新方法
+      }
+    }
+    // 8-4
+    Dep.target = null; // 可以把当前的watcher暴漏在全局上
+
     function observe(data) {
       // 对data这个对象进行劫持
       // 5-1 判断是否是对象 // 只对对象进行劫持
@@ -109,11 +147,19 @@
       // 属性劫持。闭包，里面的函数使用外面的value，这个变量不能被销毁
       // 5-8 深度属性劫持。针对某个属性值还是个对象
       observe(value); // 对所有的对象都进行属性劫持。
+      // 在第10节课：lifecycle.js给每个属性增加dep: 有了dep也有了watcher，如何让他俩关联起来
+      // 10-1
+      let dep = new Dep();
       // 5-4
       Object.defineProperty(target, key, {
         get() {
           // 取值的时候会执行get
           console.log('用户取值了');
+          // 10-2 属性的dep收集watcher
+          if (Dep.target) {
+            dep.depend(); // 让这个属性的收集器记住当前的watcher；去dep.js中增加个方法depend
+          }
+
           return value;
         },
         set(newValue) {
@@ -122,6 +168,8 @@
           if (newValue === value) return;
           observe(newValue); // 5-9 如果修改值的时候直接赋值个对象，对这个对象里的每个属性进行劫持
           value = newValue;
+          // 10-3 属性更新 让dep去更新视图
+          dep.notify(); // 通知更新
         }
       });
     }
@@ -503,6 +551,58 @@
     //     type: 1
     //     [[Prototype]]: Object
 
+    // 10. 整个过程：
+    console.log('Dep', Dep);
+
+    // 1. 需要区分是哪个watcher，每个组件都会有一个watcher，这样某个组件更新只需要更新这个组件的watcher就好。组件的特点：复用，方便维护，局部更新
+    // 每次创建一个watcher都给一个唯一的id
+    let id = 0;
+
+    // 2. 创建一个watcher类（是个渲染的类）
+    class Watcher {
+      // 不同组件有不同的watcher,每个组件都需要去创建一个watcher, 目前只有一个 渲染根实例的
+      // vm是当前watcher是哪个实例，fn要做哪些事（渲染函数)，options是参数 
+      constructor(vm, fn, options) {
+        this.id = id++;
+        // 7. 渲染watcher  // 8. 接着需要给每个属性增加dep创建observe/dep.js
+        this.renderWatcher = options; // 这里做个标识是一个渲染watcher
+        // 4. 把渲染的方法fn封装到了当前watcher中。这个函数是具备取值操作的，因为要渲染到页面上
+        this.getter = fn; // getter意味着调用这个函数可以发生取值操作。fn是vm._update(vm._render())
+        // 11. 收集dep: dep收集watcher的同时，让watcher也记录dep。// 后续我们实现计算属性，和一些清理工作需要用到
+        //      去到dep.js中做处理 Dep.target.addDep(this)，把当前属性的dep传给watcher
+        this.deps = [];
+        // 13. 通过set对重复属性进行去重。如果一个属性在多个地方使用，不需要重复去收集watcher
+        this.depsId = new Set();
+        // 5. 页面初次渲染，如果首次传入进来fn但是不调用的话，那么页面第一次是无法渲染的。
+        this.get();
+      }
+      // 12. 一个组件有多个属性，重复的属性也不用记录。去重
+      // 这里实现了watcher收集dep，dep收集watcher，并进行了去重。
+      addDep(dep) {
+        let id = dep.id;
+        // 14. 这个id不是从0++的吗？那应该每次都不一样啊？？？怎么通过判断是否在这个集合呢？？？
+        if (!this.depsId.has(id)) {
+          this.deps.push(dep); // watcher记住这个dep 
+          this.depsId.add(id); // 并将这个塞入depsId中，用于下次判断
+          dep.addSub(this); // dep记住watcher。
+        }
+      }
+      // 6. 首次取值需要调用 this.getter()也就是vm._update(vm._render()) 这个渲染方法
+      get() {
+        // 9. 在dep.js中增加个变量叫target。在执行watcher之前把这个watcher放到全局变量Dep上
+        Dep.target = this; // 把当前的watcher赋值给全局变量（类中的this指的都是当前的实例）；
+        this.getter(); // 调用_render()会取值，会去vm上取值；取值的时候
+        Dep.target = null; // 视图渲染完成后清空
+      }
+      // 15. 更新属性时需要调用更新
+      // 这个watcher就可以理解为观察者，会观察某个属性。
+      // 【每个属性有一个dep（属性就是被观察者），watcher就是观察者（属性变化了会通知观察者来更新），-> 观察者模式】
+      update() {
+        // queueWatcher(this); // 把当前的watcher 暂存起来
+        this.get(); // 属性更新后， 重新渲染
+      }
+    }
+
     // 专门用于构建虚拟dom的方法
 
     // 1. h()  _c() 创建元素的虚拟节点
@@ -645,6 +745,14 @@
       // 2.根据虚拟DOM产生真实DOM 
 
       // 3.插入到el元素中
+
+      // 4. 属性和我们的视图关联起来 做到数据变化可以自动更新视图 （观察者模式）observe/watcher.js（10 节课 实现vue的依赖收集）
+      const updateComponent = () => {
+        vm._update(vm._render());
+      };
+      // 这个watcher是个渲染watcher，只要new就会去调用这个updateComponent，并进行取值渲染
+      new Watcher(vm, updateComponent, true); // true用于标识是一个渲染watcher // new Watcher 会去执行class Watcher，里面进行页面渲染取值
+      console.log('wat', Watcher);
     }
 
     // vue核心流程 
@@ -652,8 +760,8 @@
     // 2） 模板转换成ast语法树  
     // 3) 将ast语法树转换了render函数 
     // 4) 后续每次数据更新可以只执行render函数 (无需再次执行ast转化的过程) // 通过传入不同的数据，render函数就可以返回不同的虚拟节点。
-    // render函数会去产生虚拟节点（使用响应式数据）
-    // 根据生成的虚拟节点创造真实的DOM
+    // _render()函数根据数据创建最新的虚拟DOM节点（使用响应式数据）
+    // _update()根据生成的虚拟节点创造真实的DOM,重新渲染
 
     function initMixin(Vue) {
       // 就是给Vue增加init方法

@@ -1,4 +1,5 @@
 // 1-6 导入定义好的创建元素节点和文本节点的方法
+import Watcher from "./observe/watcher";
 import { createElementVNode, createTextVNode } from "./vdom";
 
 // 1-9 根据虚拟节点创建新的真节点
@@ -99,6 +100,14 @@ export function mountComponent(vm,el) { // 这里的el 是通过querySelector处
     // 2.根据虚拟DOM产生真实DOM 
 
     // 3.插入到el元素中
+
+    // 4. 属性和我们的视图关联起来 做到数据变化可以自动更新视图 （观察者模式）observe/watcher.js（10 节课 实现vue的依赖收集）
+    const updateComponent = ()=> {
+        vm._update(vm._render())
+    }
+    // 这个watcher是个渲染watcher，只要new就会去调用这个updateComponent，并进行取值渲染
+    let wat = new Watcher(vm, updateComponent, true) // true用于标识是一个渲染watcher // new Watcher 会去执行class Watcher，里面进行页面渲染取值
+    console.log('wat', Watcher)
 }
 
 
@@ -107,6 +116,6 @@ export function mountComponent(vm,el) { // 这里的el 是通过querySelector处
 // 2） 模板转换成ast语法树  
 // 3) 将ast语法树转换了render函数 
 // 4) 后续每次数据更新可以只执行render函数 (无需再次执行ast转化的过程) // 通过传入不同的数据，render函数就可以返回不同的虚拟节点。
-// render函数会去产生虚拟节点（使用响应式数据）
-// 根据生成的虚拟节点创造真实的DOM
+// _render()函数根据数据创建最新的虚拟DOM节点（使用响应式数据）
+// _update()根据生成的虚拟节点创造真实的DOM,重新渲染
 
