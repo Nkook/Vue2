@@ -46,6 +46,10 @@
           // 只能拿到this，this指的是调用方法的对象，谁调用这些方法，this就是谁。在index.js可以看到data.__proto__ = newArrayProto，是data调用的这些方法，那么this指的就是data
           ob.observeArray(inserted);
         }
+
+        // 11-4 
+        // console.log('更新了')
+        ob.dep.notify();
         return result;
       };
     });
@@ -110,6 +114,10 @@
     // 5-3
     class Observer {
       constructor(data) {
+        // 11. 第11节课 数组更新实现原理
+        // 11-1 给每个对象都增加收集功能
+        this.dep = new Dep();
+
         // 6-6 如果data是个对象的话，也会加一个__ob__属性，然后进入else中，去遍历每一项，遍历到__ob__发现是个对象；会再次进入到Observer中，再添加个_ob__这样就形成了死循环。？？？？【这里理解不透彻】
         // 不能让data作为对象循环的时候遍历到这个__ob__属性，把它变成不可枚举类型，就可以了
         Object.defineProperty(data, '__ob__', {
@@ -143,12 +151,26 @@
         data.forEach(item => observe(item)); // 如果数组中存在引用类型，则劫持该项中的每一个属性
       }
     }
+    // 11-6 深层次嵌套会递归，递归多了性能差，不存在属性监控不到，存在的属性要重写方法  vue3-> proxy
+    function dependArray(value) {
+      for (let i = 0; i < value.length; i++) {
+        let current = value[i];
+        current.__ob__ && current.__ob__.dep.depend();
+        if (Array.isArray(current)) {
+          dependArray(current);
+        }
+      }
+    }
 
     // 5-4
     function defineReactive(target, key, value) {
       // 属性劫持。闭包，里面的函数使用外面的value，这个变量不能被销毁
       // 5-8 深度属性劫持。针对某个属性值还是个对象
-      observe(value); // 对所有的对象都进行属性劫持。
+      // observe(value) // 对所有的对象都进行属性劫持。
+
+      // 11-2 这个value上就有dep childOb.dep用来收集依赖
+      let childOb = observe(value);
+
       // 在第10节课：lifecycle.js给每个属性增加dep: 有了dep也有了watcher，如何让他俩关联起来
       // 10-1
       let dep = new Dep(); // data里的属性只会被劫持一次，在劫持该属性的时候给每个属性增加dep, 增加的dep都有唯一id，页面渲染取值会触发get，每次触发get的时候去进行watcher收集了。为了避免多次get收集重复的watcher所以就拿该属性的id进行去重！
@@ -160,8 +182,16 @@
           // 10-2 属性的dep收集watcher
           if (Dep.target) {
             dep.depend(); // 让这个属性的收集器记住当前的watcher；去dep.js中增加个方法depend
-          }
 
+            // 11-3 取值arr数组的时候，childOb有值，让数组和对象本身也实现依赖收集。在array.js当调用arr相关方法时，进行dep.notify()更新
+            if (childOb) {
+              childOb.dep.depend();
+              // 11-5 如果数组中还嵌套数组，继续对嵌套的数组进行依赖收集。递归处理
+              if (Array.isArray(value)) {
+                dependArray(value);
+              }
+            }
+          }
           return value;
         },
         set(newValue) {

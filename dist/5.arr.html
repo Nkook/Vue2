@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <!-- 九、数组更新实现原理 -->
+    <!-- {{hobby}}取值的时候会调用JSON.stringfy() 会对数组中的对象取值，所以对象会收集依赖
+        _v(_s(arr))
+        arr本身是没有收集依赖。arr中的对象有。
+    -->
+    <div id="app">
+        {{arr}}
+        <div>
+            {{hobby}}
+        </div>
+        <div>{{obj}}</div>
+    </div>
+    <script src="vue.js"></script>
+    <script>
+        // 创建一个vue的实例
+        const vm = new Vue({
+            data: { // 代理数据
+                arr: [1, 2, 3], 
+                // 6. 【给数组本身增加dep 如果数组新增了某一项 我可以触发dep更新】
+                hobby: ['eat', 'drink', {a: 1}], 
+                // 7. 【给对象也增加dep， 如果后续用户增添了属性 我可以触发dep更新】
+                obj: {a: 1}, // 修改后页面可以更新
+                // 【给数组中的数组也增加数据劫持】
+                hobby: ['eat', 'drink', {a: 1}, ['a', 'b']], 
+            },
+            // 对模版进行编译
+            el: '#app', // 将数据 解析道 el元素上。就是将页面上的name和age进行个替换
+        })
+
+        // 1. 修改数组的每一项页面不会更新
+        // vm.arr[0] = 100 // 这种方式不能监控到数组。因为只重写了数组的方法
+        // vm.arr.length = 10 // 也无法监控数组长度的变化
+
+        // 2. 修改某一项页面不会更新：这里改变的不是arr属性，而是arr对象的数组对象
+        vm.arr.push(100) // 这种是可以监控到的
+        console.log(vm.arr) // 打印是 [1, 2, 3, 100] 但是页面依然是 [1, 2, 3] 
+
+        // 3. 修改对象里a的值页面会更新：页面可以更新此时页面显示 ["eat","drink",{"a":100}]
+        vm.hobby[2].a = 100
+
+        // 4. 不会触发页面更新，让数组收集wathcer渲染页面
+
+        // 5. 修改对象：页面会更新；给对象新增属性页面不会更新
+        vm.obj.a = 99
+        // 8. 新增属性的更新 要使用$set（obj，key，value） 才能试图更新
+        vm.obj.b = 1111
+        // 新增的属性想要页面更新，需要使用vm.$set
+
+        // 9. 给数组中嵌套的数组增加属性
+        vm.hobby[3].push('c')
+
+        
+
+
+
+    </script>
+</body>
+</html>

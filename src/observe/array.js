@@ -52,7 +52,10 @@ methods.forEach(method => {
         }
 
 
-
+        // 11-4 
+        // console.log('更新了')
+        ob.dep.notify()
+        
         return result
     }
 })
