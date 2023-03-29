@@ -61,7 +61,7 @@ export function defineReactive(target, key, value) { // 属性劫持。闭包，
     observe(value) // 对所有的对象都进行属性劫持。
     // 在第10节课：lifecycle.js给每个属性增加dep: 有了dep也有了watcher，如何让他俩关联起来
     // 10-1
-    let dep = new Dep()
+    let dep = new Dep() // data里的属性只会被劫持一次，在劫持该属性的时候给每个属性增加dep, 增加的dep都有唯一id，页面渲染取值会触发get，每次触发get的时候去进行watcher收集了。为了避免多次get收集重复的watcher所以就拿该属性的id进行去重！
     // 5-4
     Object.defineProperty(target, key, {
         get() { // 取值的时候会执行get

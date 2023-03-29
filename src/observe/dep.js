@@ -6,6 +6,7 @@ let id = 0;
 class Dep{
     constructor(){
         this.id = id++; // 属性的dep要收集watcher；每次执行id就++
+        console.log('id===', id)
         this.subs = [];// 这里存放着当前属性对应的watcher有哪些; 一个属性可能有多个watcher（一个属性可以在a组件用，b组件用...）；
         // 8-3 
         // 此时再去boserve/index.js中给每个属性增加dep，let dep = new Dep()
@@ -16,7 +17,7 @@ class Dep{
     depend(){
         // 这里我们不希望放重复的watcher，而且刚才只是一个单向的关系 dep收集-> watcher；也希望 watcher记录 ->dep
         // watcher 记录dep
-        // this.subs.push(Dep.target); // 把当前的watcher放入这个栈中。这样存在重复
+        // this.subs.push(Dep.target); // 把当前的watcher放入这个栈中。这样存在重复。因为每次
 
         Dep.target.addDep(this); // 让当前watcher（Dep.target）记住dep。 在watcher.js中实现这个方法。
 
@@ -27,6 +28,7 @@ class Dep{
     // 8-6
     addSub(watcher){
         this.subs.push(watcher) // 将watcher放入subs
+        console.log('this.subs', this.subs)
     }
     // 8-8
     notify(){

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <div id="app">
+        <div style="color: red;background: pink;">{{name}} hello {{age}}</div>
+        <span>{{age}}</span>
+    </div>
+    <script src="vue.js"></script>
+    <script>
+        // 创建一个vue的实例
+        const vm = new Vue({
+            data: { // 代理数据
+                name: '张三',
+                age: 20,
+                adress: {
+                    content: '通州',
+                    num: 30
+                },
+                hobby: ['eat', 'drink', {a: 1}]
+            },
+            // 对模版进行编译
+            el: '#app', // 将数据 解析道 el元素上。就是将页面上的name和age进行个替换
+            
+        })
+
+        // 属性和我们的视图关联起来 做到数据变化可以自动更新视图 （观察者模式）
+        // setTimeout(() => {
+        //     vm.name = 'jw';
+        //     vm.age = 30
+        //     vm.name = '章三'
+        //     // vm._update(vm._render());
+        // }, 1000)
+
+        // 现在是每次更新都会重新调用更新渲染，比较耗费性能。
+        // 事件环：希望同步任务都操作完成后，再去更新异步任务。
+        // 把更新操作进行延迟，最后只走一次。
+        // 把所有的更新watcher都放入一个队列中，最后一起更新
+        // 在watcher中写个方法处理queueWatcher
+
+        // vm.name = '哈哈哈'
+        // console.log('app.innerHTML', app.innerHTML) // 此时拿到的是张三，因为给属性赋值后走的是异步需要到set里再到watcher里的update
+        
+        // nextTick不是创建了一个异步任务，而是将这个任务维护到了队列中而已 
+        // 先走内部的还是外部自己调用的nextTick？
+        // 如果使用了setTimeout的话，把赋值放在上面就先走内部的，把赋值放在vm.$nextTick后就先走外部的。如果没使用，那就是先走promise，打印永远是旧值。等待更新里的
+        vm.name = 'jw'; // 不会立即重新渲染页面
+    
+        console.log('1111vm.name', vm.name)
+        // 无论写几个都会放入队列中去。按照顺序依次执行
+        vm.$nextTick(()=>{
+            console.log('1111', app.innerHTML); // 同步获取 
+        })
+        vm.$nextTick(()=>{
+            console.log(2222); // 同步获取
+        })
+
+        // vm.name = 'jw'; // 不会立即重新渲染页面
+
+
+
+    </script>
+</body>
+</html>

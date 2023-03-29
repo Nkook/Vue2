@@ -125,12 +125,28 @@ compiler 中parse.js的 1-1 ~ 1-13  index.js中的2-1 ～ 2-7
                 让watcher也记录dep，双向记录收集是为了：如组件卸载的时候，让watcher清理掉所有的响应式数据。
                 1）当取值的时候调用depend()，addDep()将当前属性的dep传入，在watcher里收集dep，会让watcher记住dep，
                 2）同时，addSub()将当前watcher传入，告诉dep也记住watcher。同时进行了去重。
+                    （去重：那个new Dep不在get方法里，所以每个属性只会有一个dep id，每次触发get的时候去进行watcher收集了。为了避免多次get收集重复的watcher所以就拿这个属性的id进行去重！）
 
             1-4. 更新属性的时候，就会走到index.js中的set方法。让该属性的dep去更新视图。
                  调用update，再去走get()vm._update(vm._render())进行更新渲染
 
             1-5. npm run dev 打包后看3.index.html，过1秒后页面数据更新成jw 30
-            
+
+        总结：实现vue中的依赖收集：页面初始化的时候给每个属性增加dep，new Dep会给该属性分配一个唯一id，页面渲染时会创建一个watcher，将渲染和更新vm._update(vm._render())逻辑放入watcher类中，此时渲染时会去取值，并把当前的watcher给到dep.target全局变量上，此时取值会进行判断，如果该属性的dep上target有值，则调用方法，将当前watcher收集到该属性的dep中，并将该属性的dep收集到该watcher中，并通过id进行去重。此时当更新属性时，需要去调用dep中的update更新相当于再次重新渲染，会对dep中收集的所有watcher遍历一一进行更新。
+
+八、异步更新原理
+    1. 一个模板属性多次被赋值，只执行一次watcher
+        1). 每次vm.name = ''给属性赋值，都会触发set方法，去调用dep里的notify，遍历调用该属性收集的所有watcher。
+        2). 一个页面模板是一个watcher，修改多个属性时，会去触发多次watcher并且是重复的，需要对watcher进行去重，调用queueWatcher。
+            通过id进行去重，并把去重后的watcher放入一个队列中，利用防抖，等到所有的赋值同步都走完之后再去执行队列中的watcher，进行页面刷新。此时一个页面无论同时修改多少个属性，wathcer只会执行一次。
+
+    2. $nextTick 异步批处理
+        1). 在html中手动对vm.name = '李四'进行赋值，此时去app.innerHTML获取页面上的name这个值，获取到的不是最新的值。因为set赋值后，页面的更新操作相关逻辑是放在queueWatcher()方法的setTimeout异步里进行调用的。
+        2). 此时就需要用到nextTick，将一些任务维护到一个队列中，通过防抖，最后一起刷新，循环该队列依次执行。
+            直接在setTimeout里进行异步批处理的话，此时app.innerHTML获取页面是最新的值。因为这个宏任务是在更新的宏任务之后。
+            去掉setTimeout，直接打印vm.name是最新的值，获取页面不是最新的值，因为微任务优先于宏任务执行，虽然赋值是同步的，但是页面渲染在异步里。
+                vue2是使用优雅降级的方式，兼容低版本的浏览器，去进行任务队列的执行。
+                vue3直接采用Promise.resolve().then()去执行任务队列
 
                 
 
@@ -139,6 +155,20 @@ compiler 中parse.js的 1-1 ~ 1-13  index.js中的2-1 ～ 2-7
 
  
     
+
+最后总结：
+    1. 在vue渲染中会将data中的数据变成响应式的数据，调用initState，针对对象会对所有的属性进行Object.defineProperty增加get和set，还会针对数组重写数组方法。
+    2. template模板编译，将模板先转换成ast语法树，通过正则匹配标签，解析属性，标签名，文本；将ast语法树生成render方法（会把html模板转成js语法），调用render可以创建虚拟dom
+    3. 调用render函数会进行取值操作 render(){_c('div', null, _v(name))}，产生对应的虚拟dom。取值会触发get方法
+    4. vm._update()将虚拟dom渲染成真实dom。
+    // _render()函数根据数据创建最新的虚拟DOM节点（使用响应式数据）
+    // _update()根据生成的虚拟节点创造真实的DOM,重新渲染    
+    5. 数据变化自动更新视图：
+        5.1 需要再次调用vm._update(vm._render())。将渲染逻辑封装到一个watcher类中，页面初始化时会进行一次主动的调用渲染。
+        5.2 在对模板中的数据initState进行依赖收集时，通过给每个属性增加dep，在模板取值触发get时，让dep收集当前watcher，再让watcher收集dep，
+            （每个属性都有一个dep，一个组件模板页面是一个watcher，一个组件有多个属性也就是一个watcher对应多个dep，一个属性可在多个组件使用也就是一个属性又对应多个watcher。让该属性的dep记住当前这个组件的watcher；也让当前组件的这个watcher记住所有属性的dep。
+            一个属性可能在页面上多个地方使用，会进行多个get取值，为了避免该属性的dep中收集重复同样的watcher，通过id进行去重）。
+        5.3 当数据更新时触发set，通知dep去遍历当前属性的dep收集的所有watcher，去进行渲染逻辑的调用。
     
 
 

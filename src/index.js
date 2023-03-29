@@ -3,10 +3,14 @@
 
 import { initMixin } from "./init"
 import { lifecycle } from "./lifecycle"
+import { nexTick } from "./observe/watcher"
 
 function Vue(options) { // options就是用户的选项
     this._init(options) // 默认就调用了init
 }
+
+// 11节课实现异步更新时扩展的方法
+Vue.prototype.$nextTick = nexTick
 
 // 把原型方法扩展成一个个函数
 initMixin(Vue) // 扩展了init方法
