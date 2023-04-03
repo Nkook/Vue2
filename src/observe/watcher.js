@@ -4,7 +4,7 @@
 // 2）然后取值调用_render()；取值会走到index.js的get上；    this.getter = fn；fn是vm._update(vm._render())；
         // 在observe/index.js的 get方法上进行判断，当前属性的dep是否有target，有的话就让这个属性的收集器记住当前的watcher
 
-import Dep from './dep'
+import Dep, { popTarget, pushTarget } from './dep'
 console.log('Dep', Dep)
 
 
@@ -26,8 +26,14 @@ class Watcher { // 不同组件有不同的watcher,每个组件都需要去创�
         this.deps = [];
         // 13. 通过set对重复属性进行去重。如果一个属性在多个地方使用，不需要重复去收集watcher
         this.depsId = new Set();
-        // 5. 页面初次渲染，如果首次传入进来fn但是不调用的话，那么页面第一次是无法渲染的。
-        this.get();
+        // // 5. 页面初次渲染，如果首次传入进来fn但是不调用的话，那么页面第一次是无法渲染的。
+        // this.get();
+
+        // 第13节课 计算属性传入的
+        this.lazy = options.lazy;
+        this.dirty = this.lazy; // 缓存值
+        this.vm = vm;
+        this.lazy ? undefined : this.get()
     }
     // 12. 一个组件有多个属性，重复的属性也不用记录。去重
     // 这里实现了watcher收集dep，dep收集watcher，并进行了去重。
@@ -40,24 +46,55 @@ class Watcher { // 不同组件有不同的watcher,每个组件都需要去创�
             dep.addSub(this); // dep记住watcher。
         }
     }
+    // 第13节课
+    evaluate(){
+        this.value =  this.get(); // 获取到用户函数的返回值 并且还要标识为脏 
+        this.dirty = false;
+    }
     // 6. 首次取值需要调用 this.getter()也就是vm._update(vm._render()) 这个渲染方法
     get() {
-        // 9. 在dep.js中增加个变量叫target。在执行watcher之前把这个watcher放到全局变量Dep上
-        Dep.target = this // 把当前的watcher赋值给全局变量（类中的this指的都是当前的实例）；
-        this.getter() // 调用_render()会取值，会去vm上取值；取值的时候
-        Dep.target = null // 视图渲染完成后清空
+        // // 9. 在dep.js中增加个变量叫target。在执行watcher之前把这个watcher放到全局变量Dep上
+        // Dep.target = this // 把当前的watcher赋值给全局变量（类中的this指的都是当前的实例）；
+        // this.getter() // 调用_render()会取值，会去vm上取值；取值的时候
+        // Dep.target = null // 视图渲染完成后清空
+
+        // 第13节课 实现计算属性
+        // 这里维护成队列，不再只放入一个watcher
+        pushTarget(this)// 静态属性就是只有一份
+        let value = this.getter.call(this.vm); // 会去vm上取值  vm._update(vm._render) 取name 和age
+        popTarget() // 渲染完毕后就清空
+        return value; // 拿到函数执行后的返回值
+
     }
     // 15. 更新属性时需要调用更新
     // 这个watcher就可以理解为观察者，会观察某个属性。
     // 【每个属性有一个dep（属性就是被观察者），watcher就是观察者（属性变化了会通知观察者来更新），-> 观察者模式】
     update() {
-        // 16. 11节课实现异步更新原理
-        // 实现该方法，通过防抖实现走完所有同步任务，再去更新页面
-        queueWatcher(this); // 把当前的watcher 暂存起来
-        // this.get(); // 属性更新后， 重新渲染。（缺点：每次更新一个属性触发set后都要重新update渲染，应该等到同步的设置值都完成后再去更新页面）
+        // // 16. 11节课实现异步更新原理
+        // // 实现该方法，通过防抖实现走完所有同步任务，再去更新页面
+        // queueWatcher(this); // 把当前的watcher 暂存起来
+        // // this.get(); // 属性更新后， 重新渲染。（缺点：每次更新一个属性触发set后都要重新update渲染，应该等到同步的设置值都完成后再去更新页面）
+
+        // 第13节课
+        if(this.lazy){
+            // 如果是计算属性  依赖的值变化了 就标识计算属性是脏值了
+            this.dirty = true;
+        }else{
+            queueWatcher(this); // 把当前的watcher 暂存起来
+            // this.get(); // 重新渲染
+        }
     }
     run() {
         this.get()
+    }  
+
+    // 第13节课
+    depend(){ // watcher的depend 就是让watcher中dep去depend
+        let i =  this.deps.length;
+        while(i--){
+            // dep.depend()
+            this.deps[i].depend(); // 让计算属性watcher 也收集渲染watcher
+        }
     }
 }
 

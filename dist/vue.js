@@ -4,6 +4,60 @@
     (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+    // 首次渲染的时候会收集， 更新的时候会再次收集。
+    // 只有在模板里取值的时候，才会做依赖收集。
+
+    let id$1 = 0;
+    // 8-1. 每个属性都有dep，创建一个类
+    class Dep {
+      constructor() {
+        this.id = id$1++; // 属性的dep要收集watcher；每次执行id就++
+        console.log('id===', id$1);
+        this.subs = []; // 这里存放着当前属性对应的watcher有哪些; 一个属性可能有多个watcher（一个属性可以在a组件用，b组件用...）；
+        // 8-3 
+        // 此时再去boserve/index.js中给每个属性增加dep，let dep = new Dep()
+        // 有了dep也有了watcher，如何让他俩关联起来？可以把当前的watcher暴漏在全局上；Dep.target = null;
+        // 在watcher.js中把当前的watcher赋值给全局变量Dep.target
+      }
+      // 8-5
+      depend() {
+        // 这里我们不希望放重复的watcher，而且刚才只是一个单向的关系 dep收集-> watcher；也希望 watcher记录 ->dep
+        // watcher 记录dep
+        // this.subs.push(Dep.target); // 把当前的watcher放入这个栈中。这样存在重复。因为每次
+
+        Dep.target.addDep(this); // 让当前watcher（Dep.target）记住dep。 在watcher.js中实现这个方法。
+
+        // 8-7
+        // dep 和 watcher是一个多对多的关系 （一个属性可以在多个组件中使用 dep -> 多个watcher）
+        // 一个组件中由多个属性组成 （一个watcher 对应多个dep）
+      }
+      // 8-6
+      addSub(watcher) {
+        this.subs.push(watcher); // 将watcher放入subs
+        console.log('this.subs', this.subs);
+      }
+      // 8-8
+      notify() {
+        this.subs.forEach(watcher => watcher.update()); // 告诉watcher要更新了，让这里subs所有记住的依赖都调用更新方法
+      }
+    }
+    // 8-4
+    Dep.target = null; // 可以把当前的watcher暴漏在全局上
+
+    // 第13节课 实现计算属性
+    // 栈形结构
+    let stack = [];
+    // 渲染之前让watcher入栈
+    function pushTarget(watcher) {
+      stack.push(watcher);
+      Dep.target = watcher;
+    }
+    // 渲染之后让这个watcher出栈 删除
+    function popTarget() {
+      stack.pop();
+      Dep.target = stack[stack.length - 1];
+    }
+
     // 重写数组中的部分方法，最后把重写的对象返回出去
 
     // 1. 首先拿到原来的数组的方法，通过原型
@@ -53,46 +107,6 @@
         return result;
       };
     });
-
-    // 首次渲染的时候会收集， 更新的时候会再次收集。
-    // 只有在模板里取值的时候，才会做依赖收集。
-
-    let id$1 = 0;
-    // 8-1. 每个属性都有dep，创建一个类
-    class Dep {
-      constructor() {
-        this.id = id$1++; // 属性的dep要收集watcher；每次执行id就++
-        console.log('id===', id$1);
-        this.subs = []; // 这里存放着当前属性对应的watcher有哪些; 一个属性可能有多个watcher（一个属性可以在a组件用，b组件用...）；
-        // 8-3 
-        // 此时再去boserve/index.js中给每个属性增加dep，let dep = new Dep()
-        // 有了dep也有了watcher，如何让他俩关联起来？可以把当前的watcher暴漏在全局上；Dep.target = null;
-        // 在watcher.js中把当前的watcher赋值给全局变量Dep.target
-      }
-      // 8-5
-      depend() {
-        // 这里我们不希望放重复的watcher，而且刚才只是一个单向的关系 dep收集-> watcher；也希望 watcher记录 ->dep
-        // watcher 记录dep
-        // this.subs.push(Dep.target); // 把当前的watcher放入这个栈中。这样存在重复。因为每次
-
-        Dep.target.addDep(this); // 让当前watcher（Dep.target）记住dep。 在watcher.js中实现这个方法。
-
-        // 8-7
-        // dep 和 watcher是一个多对多的关系 （一个属性可以在多个组件中使用 dep -> 多个watcher）
-        // 一个组件中由多个属性组成 （一个watcher 对应多个dep）
-      }
-      // 8-6
-      addSub(watcher) {
-        this.subs.push(watcher); // 将watcher放入subs
-        console.log('this.subs', this.subs);
-      }
-      // 8-8
-      notify() {
-        this.subs.forEach(watcher => watcher.update()); // 告诉watcher要更新了，让这里subs所有记住的依赖都调用更新方法
-      }
-    }
-    // 8-4
-    Dep.target = null; // 可以把当前的watcher暴漏在全局上
 
     function observe(data) {
       // 对data这个对象进行劫持
@@ -206,11 +220,191 @@
       });
     }
 
+    // 10. 整个过程：
+    console.log('Dep', Dep);
+
+    // 1. 需要区分是哪个watcher，每个组件都会有一个watcher，这样某个组件更新只需要更新这个组件的watcher就好。组件的特点：复用，方便维护，局部更新
+    // 每次创建一个watcher都给一个唯一的id
+    let id = 0;
+
+    // 2. 创建一个watcher类（是个渲染的类）
+    class Watcher {
+      // 不同组件有不同的watcher,每个组件都需要去创建一个watcher, 目前只有一个 渲染根实例的
+      // vm是当前watcher是哪个实例，fn要做哪些事（渲染函数)，options是参数 
+      constructor(vm, fn, options) {
+        this.id = id++;
+        // 7. 渲染watcher  // 8. 接着需要给每个属性增加dep创建observe/dep.js
+        this.renderWatcher = options; // 这里做个标识是一个渲染watcher
+        // 4. 把渲染的方法fn封装到了当前watcher中。这个函数是具备取值操作的，因为要渲染到页面上
+        this.getter = fn; // getter意味着调用这个函数可以发生取值操作。fn是vm._update(vm._render())
+        // 11. 收集dep: dep收集watcher的同时，让watcher也记录dep。// 后续我们实现计算属性，和一些清理工作需要用到
+        //      去到dep.js中做处理 Dep.target.addDep(this)，把当前属性的dep传给watcher
+        this.deps = [];
+        // 13. 通过set对重复属性进行去重。如果一个属性在多个地方使用，不需要重复去收集watcher
+        this.depsId = new Set();
+        // // 5. 页面初次渲染，如果首次传入进来fn但是不调用的话，那么页面第一次是无法渲染的。
+        // this.get();
+
+        // 第13节课 计算属性传入的
+        this.lazy = options.lazy;
+        this.dirty = this.lazy; // 缓存值
+        this.vm = vm;
+        this.lazy ? undefined : this.get();
+      }
+      // 12. 一个组件有多个属性，重复的属性也不用记录。去重
+      // 这里实现了watcher收集dep，dep收集watcher，并进行了去重。
+      addDep(dep) {
+        let id = dep.id;
+        // 14. data里的属性只会被劫持一次，在劫持该属性的时候给每个属性增加dep, 增加的dep都有唯一id，页面渲染取值会触发get，每次触发get的时候去进行watcher收集了。为了避免多次get收集重复的watcher所以就拿该属性的id进行去重！
+        if (!this.depsId.has(id)) {
+          this.deps.push(dep); // watcher记住这个dep 
+          this.depsId.add(id); // 并将这个塞入depsId中，用于下次判断
+          dep.addSub(this); // dep记住watcher。
+        }
+      }
+      // 第13节课
+      evaluate() {
+        this.value = this.get(); // 获取到用户函数的返回值 并且还要标识为脏 
+        this.dirty = false;
+      }
+      // 6. 首次取值需要调用 this.getter()也就是vm._update(vm._render()) 这个渲染方法
+      get() {
+        // // 9. 在dep.js中增加个变量叫target。在执行watcher之前把这个watcher放到全局变量Dep上
+        // Dep.target = this // 把当前的watcher赋值给全局变量（类中的this指的都是当前的实例）；
+        // this.getter() // 调用_render()会取值，会去vm上取值；取值的时候
+        // Dep.target = null // 视图渲染完成后清空
+
+        // 第13节课 实现计算属性
+        // 这里维护成队列，不再只放入一个watcher
+        pushTarget(this); // 静态属性就是只有一份
+        let value = this.getter.call(this.vm); // 会去vm上取值  vm._update(vm._render) 取name 和age
+        popTarget(); // 渲染完毕后就清空
+        return value; // 拿到函数执行后的返回值
+      }
+      // 15. 更新属性时需要调用更新
+      // 这个watcher就可以理解为观察者，会观察某个属性。
+      // 【每个属性有一个dep（属性就是被观察者），watcher就是观察者（属性变化了会通知观察者来更新），-> 观察者模式】
+      update() {
+        // // 16. 11节课实现异步更新原理
+        // // 实现该方法，通过防抖实现走完所有同步任务，再去更新页面
+        // queueWatcher(this); // 把当前的watcher 暂存起来
+        // // this.get(); // 属性更新后， 重新渲染。（缺点：每次更新一个属性触发set后都要重新update渲染，应该等到同步的设置值都完成后再去更新页面）
+
+        // 第13节课
+        if (this.lazy) {
+          // 如果是计算属性  依赖的值变化了 就标识计算属性是脏值了
+          this.dirty = true;
+        } else {
+          queueWatcher(this); // 把当前的watcher 暂存起来
+          // this.get(); // 重新渲染
+        }
+      }
+
+      run() {
+        this.get();
+      }
+
+      // 第13节课
+      depend() {
+        // watcher的depend 就是让watcher中dep去depend
+        let i = this.deps.length;
+        while (i--) {
+          // dep.depend()
+          this.deps[i].depend(); // 让计算属性watcher 也收集渲染watcher
+        }
+      }
+    }
+
+    let queue = [];
+    let has = {};
+    let pending = false; // 防抖，无论触发多少次只走一次
+    // 18. 刷新操作，页面渲染
+    function flushSchedulerQueue() {
+      let flushQueue = queue.slice(0);
+      queue = [];
+      has = {};
+      pending = false;
+      flushQueue.forEach(q => q.run()); // 在刷新的过程中可能还有新的watcher，重新放到queue中
+    }
+    // 17. 对watcher进行去重，并只调用一次。
+    function queueWatcher(watcher) {
+      // 一个页面上的多个属性对应的是同一个watcher。去重
+      const id = watcher.id;
+      if (!has[id]) {
+        queue.push(watcher);
+        has[id] = true;
+        console.log('queue', queue);
+        // 不管我们的update执行多少次，但是最终只执行一轮刷新操作。
+        if (!pending) {
+          setTimeout(flushSchedulerQueue, 0);
+          pending = true;
+        }
+      }
+    }
+
+    // 18.内部更新使用nexTick，外部用户在html页面手动更新时，也调用nexTick。于是把该方法挂载到vm原型上，在html页面就可以调用
+    // nexTick将异步任务维护到队列中
+
+    let callbacks = [];
+    let waiting = false;
+    // 19. 异步批处理
+    function flushCallbacks() {
+      let cbs = callbacks.slice(0);
+      waiting = false;
+      callbacks = [];
+      cbs.forEach(cb => cb()); // 按照顺序依次执行
+    }
+
+    // 20. nextTick 没有直接使用某个api 而是采用优雅降级的方式 
+    // 内部先采用的是promise （ie不兼容）  MutationObserver(h5的api)  可以考虑ie专享的 setImmediate  setTimeout
+    // let timerFunc;
+    // if (Promise) {
+    //     timerFunc = () => {
+    //         Promise.resolve().then(flushCallbacks)
+    //     }
+    // }else if(MutationObserver){
+    //     let observer = new MutationObserver(flushCallbacks); // 这里传入的回调是异步执行的
+    //     let textNode = document.createTextNode(1);
+    //     observer.observe(textNode,{
+    //         characterData:true
+    //     });
+    //     timerFunc = () => {
+    //         textNode.textContent = 2;
+    //     }
+    // }else if(setImmediate){
+    //     timerFunc = () => {
+    //        setImmediate(flushCallbacks);
+    //     }
+    // }else{
+    //     timerFunc = () => {
+    //         setTimeout(flushCallbacks);
+    //      }
+    // }
+    function nexTick(cb) {
+      // 先内部还是先页面用户手动触发的？谁在前先执行谁。nexTick里将方法放入队列的方法是同步的，执行刷新是异步的。
+      callbacks.push(cb); // 维护nexTick中的callback方法
+      if (!waiting) {
+        // setTimeout(() => {
+        // flushCallbacks() // 最后一起刷新
+        // 21. 优雅降级 兼容多浏览器。比setTimeout更快，需要开启一个新线程，promise只是插入一个异步
+        // timerFunc()
+        // 22. vue3 直接使用promise
+        Promise.resolve().then(flushCallbacks);
+        // }, 0)
+        waiting = true;
+      }
+    }
+
     function initState(vm) {
       const opts = vm.$options; // 获取所有的选项
       // 3. 如果选项中有data属性，则做数据初始化
       if (opts.data) {
         initData(vm);
+      }
+
+      // 第13节课计算属性
+      if (opts.computed) {
+        initComputed(vm);
       }
     }
     // 4. 数据初始化
@@ -248,8 +442,58 @@
         }
       });
     }
-
     // 到这里就有两次数据劫持，一次是把用户的数据进行了属性劫持，一次是代理，当取值的时候代理到了某个值
+
+    // 第13节课 计算属性
+    function initComputed(vm) {
+      // 取到用户写的所有的计算属性：存在两种写法
+      const computed = vm.$options.computed;
+      const watchers = vm._computedWatchers = {}; // 将计算属性watcher保存到vm上
+      for (let key in computed) {
+        // 根据是对象还是函数分别做处理。
+        let userDef = computed[key];
+
+        // 我们需要监控 计算属性中get的变化
+        let fn = typeof userDef === 'function' ? userDef : userDef.get;
+
+        // 如果直接new Watcher 默认就会执行fn, 将属性和watcher对应起来 
+        // 不希望fn立刻执行，希望取值的时候再执行，增加{ lazy: true }
+        watchers[key] = new Watcher(vm, fn, {
+          lazy: true
+        }); // 一个计算属性对应一个watcher
+
+        defineComputed(vm, key, userDef); // 定义的时候就给当前vm实例上增加一个fullname，值为一个函数
+      }
+    }
+
+    function defineComputed(target, key, userDef) {
+      // const getter = typeof userDef === 'function' ? userDef : userDef.get;
+      const setter = userDef.set || (() => {});
+
+      // 可以通过实例拿到对应的属性
+      Object.defineProperty(target, key, {
+        get: createComputedGetter(key),
+        // 页面{{fullname}} 取值时就会走这个get。现在是每次取值都走一遍，需要根据属性值没有变化时，不再走get
+        set: setter
+      });
+    }
+    // 计算属性根本不会收集依赖 ，只会让自己的依赖属性去收集依赖
+    function createComputedGetter(key) {
+      // 我们需要检测是否要执行这个getter
+      return function () {
+        const watcher = this._computedWatchers[key]; // 获取到对应属性的watcher // this是当前的vm
+        if (watcher.dirty) {
+          // 如果是脏的就去执行 用户传入的 函数
+          watcher.evaluate(); // 求值后 dirty变为了false ,下次就不求值了
+        }
+
+        if (Dep.target) {
+          // 计算属性出栈后 还要渲染watcher， 我应该让计算属性watcher里面的属性 也去收集上一层watcher
+          watcher.depend();
+        }
+        return watcher.value; // 最后返回的是watcher上的值
+      };
+    }
 
     // <div id="app">
     //    <div>{{name}}</div>
@@ -582,143 +826,6 @@
     //     tag: "div"
     //     type: 1
     //     [[Prototype]]: Object
-
-    // 10. 整个过程：
-    console.log('Dep', Dep);
-
-    // 1. 需要区分是哪个watcher，每个组件都会有一个watcher，这样某个组件更新只需要更新这个组件的watcher就好。组件的特点：复用，方便维护，局部更新
-    // 每次创建一个watcher都给一个唯一的id
-    let id = 0;
-
-    // 2. 创建一个watcher类（是个渲染的类）
-    class Watcher {
-      // 不同组件有不同的watcher,每个组件都需要去创建一个watcher, 目前只有一个 渲染根实例的
-      // vm是当前watcher是哪个实例，fn要做哪些事（渲染函数)，options是参数 
-      constructor(vm, fn, options) {
-        this.id = id++;
-        // 7. 渲染watcher  // 8. 接着需要给每个属性增加dep创建observe/dep.js
-        this.renderWatcher = options; // 这里做个标识是一个渲染watcher
-        // 4. 把渲染的方法fn封装到了当前watcher中。这个函数是具备取值操作的，因为要渲染到页面上
-        this.getter = fn; // getter意味着调用这个函数可以发生取值操作。fn是vm._update(vm._render())
-        // 11. 收集dep: dep收集watcher的同时，让watcher也记录dep。// 后续我们实现计算属性，和一些清理工作需要用到
-        //      去到dep.js中做处理 Dep.target.addDep(this)，把当前属性的dep传给watcher
-        this.deps = [];
-        // 13. 通过set对重复属性进行去重。如果一个属性在多个地方使用，不需要重复去收集watcher
-        this.depsId = new Set();
-        // 5. 页面初次渲染，如果首次传入进来fn但是不调用的话，那么页面第一次是无法渲染的。
-        this.get();
-      }
-      // 12. 一个组件有多个属性，重复的属性也不用记录。去重
-      // 这里实现了watcher收集dep，dep收集watcher，并进行了去重。
-      addDep(dep) {
-        let id = dep.id;
-        // 14. data里的属性只会被劫持一次，在劫持该属性的时候给每个属性增加dep, 增加的dep都有唯一id，页面渲染取值会触发get，每次触发get的时候去进行watcher收集了。为了避免多次get收集重复的watcher所以就拿该属性的id进行去重！
-        if (!this.depsId.has(id)) {
-          this.deps.push(dep); // watcher记住这个dep 
-          this.depsId.add(id); // 并将这个塞入depsId中，用于下次判断
-          dep.addSub(this); // dep记住watcher。
-        }
-      }
-      // 6. 首次取值需要调用 this.getter()也就是vm._update(vm._render()) 这个渲染方法
-      get() {
-        // 9. 在dep.js中增加个变量叫target。在执行watcher之前把这个watcher放到全局变量Dep上
-        Dep.target = this; // 把当前的watcher赋值给全局变量（类中的this指的都是当前的实例）；
-        this.getter(); // 调用_render()会取值，会去vm上取值；取值的时候
-        Dep.target = null; // 视图渲染完成后清空
-      }
-      // 15. 更新属性时需要调用更新
-      // 这个watcher就可以理解为观察者，会观察某个属性。
-      // 【每个属性有一个dep（属性就是被观察者），watcher就是观察者（属性变化了会通知观察者来更新），-> 观察者模式】
-      update() {
-        // 16. 11节课实现异步更新原理
-        // 实现该方法，通过防抖实现走完所有同步任务，再去更新页面
-        queueWatcher(this); // 把当前的watcher 暂存起来
-        // this.get(); // 属性更新后， 重新渲染。（缺点：每次更新一个属性触发set后都要重新update渲染，应该等到同步的设置值都完成后再去更新页面）
-      }
-
-      run() {
-        this.get();
-      }
-    }
-    let queue = [];
-    let has = {};
-    let pending = false; // 防抖，无论触发多少次只走一次
-    // 18. 刷新操作，页面渲染
-    function flushSchedulerQueue() {
-      let flushQueue = queue.slice(0);
-      queue = [];
-      has = {};
-      pending = false;
-      flushQueue.forEach(q => q.run()); // 在刷新的过程中可能还有新的watcher，重新放到queue中
-    }
-    // 17. 对watcher进行去重，并只调用一次。
-    function queueWatcher(watcher) {
-      // 一个页面上的多个属性对应的是同一个watcher。去重
-      const id = watcher.id;
-      if (!has[id]) {
-        queue.push(watcher);
-        has[id] = true;
-        console.log('queue', queue);
-        // 不管我们的update执行多少次，但是最终只执行一轮刷新操作。
-        if (!pending) {
-          setTimeout(flushSchedulerQueue, 0);
-          pending = true;
-        }
-      }
-    }
-
-    // 18.内部更新使用nexTick，外部用户在html页面手动更新时，也调用nexTick。于是把该方法挂载到vm原型上，在html页面就可以调用
-    // nexTick将异步任务维护到队列中
-
-    let callbacks = [];
-    let waiting = false;
-    // 19. 异步批处理
-    function flushCallbacks() {
-      let cbs = callbacks.slice(0);
-      waiting = false;
-      callbacks = [];
-      cbs.forEach(cb => cb()); // 按照顺序依次执行
-    }
-
-    // 20. nextTick 没有直接使用某个api 而是采用优雅降级的方式 
-    // 内部先采用的是promise （ie不兼容）  MutationObserver(h5的api)  可以考虑ie专享的 setImmediate  setTimeout
-    // let timerFunc;
-    // if (Promise) {
-    //     timerFunc = () => {
-    //         Promise.resolve().then(flushCallbacks)
-    //     }
-    // }else if(MutationObserver){
-    //     let observer = new MutationObserver(flushCallbacks); // 这里传入的回调是异步执行的
-    //     let textNode = document.createTextNode(1);
-    //     observer.observe(textNode,{
-    //         characterData:true
-    //     });
-    //     timerFunc = () => {
-    //         textNode.textContent = 2;
-    //     }
-    // }else if(setImmediate){
-    //     timerFunc = () => {
-    //        setImmediate(flushCallbacks);
-    //     }
-    // }else{
-    //     timerFunc = () => {
-    //         setTimeout(flushCallbacks);
-    //      }
-    // }
-    function nexTick(cb) {
-      // 先内部还是先页面用户手动触发的？谁在前先执行谁。nexTick里将方法放入队列的方法是同步的，执行刷新是异步的。
-      callbacks.push(cb); // 维护nexTick中的callback方法
-      if (!waiting) {
-        // setTimeout(() => {
-        // flushCallbacks() // 最后一起刷新
-        // 21. 优雅降级 兼容多浏览器。比setTimeout更快，需要开启一个新线程，promise只是插入一个异步
-        // timerFunc()
-        // 22. vue3 直接使用promise
-        Promise.resolve().then(flushCallbacks);
-        // }, 0)
-        waiting = true;
-      }
-    }
 
     // 专门用于构建虚拟dom的方法
 

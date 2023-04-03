@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+    <!-- 第13节课 实现计算属性-->
+     <!-- {{fullname}}  {{fullname}} -->
+    <div id="app">
+        {{firstname}} {{fullname}}
+    </div>
+    <script src="vue.js"></script>
+    <!-- <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.14/vue.js"></script> -->
+    <script>
+        // 1.计算属性原理
+        // 2.watch实现原理
+        // 3.数组响应式原理
+        const vm = new Vue({
+            el:'#app',
+            data:{
+                firstname:'珠',
+                lastname: '峰',
+                age:13
+            },
+            // 计算属性 依赖的值发生变化才会重新执行用户的方法。如何做到： 计算属性中要维护一个dirty属性， 默认计算属性不会立刻执行
+            // 计算属性就是一个defineProperty
+            // 计算属性也是一个watcher，默认渲染会创造一个渲染watcher
+            // 底层就是一个带有dirty属性的watcher
+            computed:{
+                newName(){
+                    return this.age
+                },
+                // 第一种方法 函数
+                fullname(){ // defineProperty中的get方法
+                    console.log('run') // 页面多次取值，属性值不发生变化，不会进行重新计算。使用缓存的。
+                    return this.firstname + this.lastname + this.newName
+                }
+                // 第二种方法 对象
+                // fullname:{
+                //     get(){
+                //         console.log('run')
+                //         return this.firstname + this.lastname
+                //     },
+                //     set(newVal){
+                //         console.log(newVal)
+                //     }
+                // }
+            }
+        });
+        
+        setTimeout(()=>{
+            
+            vm.firstname = 'xxx'; // 会执行什么？ 执行计算属性watcher更新操作  dirty = true;
+        },1000)
+
+        /**
+         * 使用vue的计算属性： 1. 取值计算就是一个defineProperty
+         *                  2. 依赖的值发生变化才会重新执行用户的方法
+         *                  3. 是一个带有dirty属性的watcher
+         * 
+         * 
+         * 整个页面组件是一个watcher 最外层的
+         * 计算属性也是一个watcher，页面初始化会创造一个渲染watcher
+         * 计算属性里有两个属性firstname lastname分别对应各自的dep，dep会收集自己属性的watcher，也就是收集计算属性的watcher
+         * 当修改属性firstname时，只会更新计算属性的watcher，并不会重新去渲染页面
+         * 如果也想要去渲染页面的watcher，需要让dep记住自己的计算属性watcher之外，还需要记住外层页面的渲染watcher
+         * 这样等到属性值改变时，通知计算属性watcher去重新计算，再通知页面渲染watcher去渲染页面
+         * 
+         * 1. 之前在watcher类中 通过get方法，直接让属性记住当前的watcher, 渲染结束后再清空这个watcher
+         * 改成两个方法维护 pushTarget() popTarget()
+         * 声明一个栈 用来维护watcher
+         * 页面初始化时，会进行属性取值先把页面渲染的watcher放入栈中，计算属性取值时再把计算属性的watcher放入 [页面watcher，计算属性watcher]
+         * 之后dep再去收集这两个watcher
+         * 
+         * 2. 此时页面存在computed，用户传值就是computed
+         * 需要在初始化的时候，state.js中进行computed初始化处理：遍历所有的computed，分情况设置setter和getter函数
+         * 变成计算属性：首先需要给vm上定义这些属性，其次对这个属性增加相应的值，也就是get set
+         * 定义好之后就可以通过实例拿到对应的属性
+         * 
+         * 3. 此时页面的计算属性可以执行了，需要加缓存，当属性值没有变化时，不需要重新去计算
+         * 定义计算属性的watcher
+         * 计算属性每次执行走的都是get方法，即使属性没变化，性能有问题，需要fn() 懒执行
+         * 
+         * 4. 在watcher.js中去对传的懒执行options.lazy进行判断，为true的时候不走fn()
+         * 
+         * 5. 在state.js中监测是否要执行这个getter，返回的是个函数。
+         * 拿到当前计算属性对应的watcher，如果watcher里的dirty是true，就去执行fn()，返回结果value，
+         * 并将dirty置为false, 执行后清空计算属性的watcher。这样取值时只会走一次fn()
+         * 
+         * 6. 修改了属性值后，需要页面渲染watcher更新
+         * 此时属性对应的dep收集的是计算属性的watcher，是不能进行页面更新的
+         * 当计算属性依赖的属性值发生了变化，会触发该属性的set方法，会触发update()，执行watcher。执行的是计算属性的watcher，页面不会更新
+         * 在update方法里，如果lazy是true说明是计算属性，依赖的值变化了，将dirty为true
+         * 
+         * 7. 如果计算属性在页面中使用了
+         * 所依赖的属性的dep不仅要记住计算属性的watcher，还要记住外层渲染watcher
+         * 
+         * 
+         * 
+         **/
+    
+        
+    </script>
+</body>
+
+</html>

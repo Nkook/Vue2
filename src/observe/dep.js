@@ -29,7 +29,7 @@ class Dep{
     addSub(watcher){
         this.subs.push(watcher) // 将watcher放入subs
         console.log('this.subs', this.subs)
-    }
+    }  
     // 8-8
     notify(){
         this.subs.forEach(watcher=>watcher.update()); // 告诉watcher要更新了，让这里subs所有记住的依赖都调用更新方法
@@ -37,6 +37,20 @@ class Dep{
 }
 // 8-4
 Dep.target = null; // 可以把当前的watcher暴漏在全局上
+
+// 第13节课 实现计算属性
+// 栈形结构
+let stack = [];
+// 渲染之前让watcher入栈
+export function pushTarget(watcher){
+    stack.push(watcher);
+    Dep.target = watcher;
+}
+// 渲染之后让这个watcher出栈 删除
+export function popTarget(){
+    stack.pop();
+    Dep.target = stack[stack.length - 1];
+}
 
 // 8-2. 导出
 export default Dep;
